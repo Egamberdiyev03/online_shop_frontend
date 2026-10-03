@@ -1,9 +1,10 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { CartService } from '../../core/services/cart.service';
 import { AuthStateService } from '../../core/services/auth-state.service';
+import { AuthService } from '../../core/services/auth.service';
 import { CustomerService } from '../../core/services/customer.service';
 import { Customer } from '../../core/models/customer.model';
 
@@ -16,31 +17,71 @@ import { Customer } from '../../core/models/customer.model';
       <div class="top-bar">
         <div class="top-bar-inner">
           <div class="top-announcement">
-            <span>✨ OnlineShop — Zamonaviy Clean Architecture E-Commerce Platformasi</span>
+            <span>&#128640; OnlineShop &#128187; Zamonaviy Clean Architecture E-Commerce Platformasi</span>
           </div>
-          <div class="customer-picker">
-            <span class="picker-label">Faol Mijoz:</span>
-            <select 
-              class="customer-select" 
-              [ngModel]="authState.currentCustomerId()" 
-              (ngModelChange)="onCustomerChange($event)"
-            >
-              <option *ngFor="let c of customers" [value]="c.id">
-                #{{ c.id }} - {{ c.name }}
-              </option>
-              <option *ngIf="customers.length === 0" [value]="authState.currentCustomerId()">
-                Mijoz #{{ authState.currentCustomerId() }}
-              </option>
-            </select>
 
+          <div class="top-actions">
+            <!-- 1. Tizimga kirish / Chiqish qismi (AUTH) -->
+            <ng-container *ngIf="authState.isAuthenticated(); else guestView">
+              <div class="user-profile-section">
+                <a routerLink="/profile" class="user-badge-link" title="Profil sahifasiga o'tish">
+                  <span class="user-role-badge" [ngClass]="(authState.userRole() || '').toLowerCase()">
+                    {{ authState.userRole() || 'Mijoz' }}
+                  </span>
+                  <span class="user-name">Salom, <strong>{{ authState.userName() }}</strong></span>
+                </a>
+
+                <button class="logout-btn" (click)="onLogout()" title="Tizimdan chiqish">
+                  &#10142; Chiqish
+                </button>
+              </div>
+            </ng-container>
+
+            <ng-template #guestView>
+              <div class="auth-section">
+                <a routerLink="/login" class="top-auth-link">&#128272; Kirish</a>
+                <span class="top-divider">|</span>
+                <a routerLink="/register" class="top-auth-link">&#128100; Ro'yxatdan o'tish</a>
+              </div>
+            </ng-template>
+
+            <!-- 2. Simulyatsiya (Mijoz tanlash) - Faqat tizimga kirmagan (mehmon) holatda test qilish uchun ko'rsatiladi -->
+            <div class="customer-picker" *ngIf="!authState.isAuthenticated()">
+              <span class="picker-label">Test Mijoz:</span>
+              <select 
+                class="customer-select" 
+                [ngModel]="authState.currentCustomerId()" 
+                (ngModelChange)="onCustomerChange($event)"
+              >
+                <option *ngFor="let c of customers" [value]="c.id">
+                  #{{ c.id }} - {{ c.name }}
+                </option>
+                <option *ngIf="customers.length === 0" [value]="authState.currentCustomerId()">
+                  Mijoz #{{ authState.currentCustomerId() }}
+                </option>
+              </select>
+            </div>
+
+            <!-- 3. Admin Rejimi tugmasi (Oddiy mijozga kerak emas) -->
             <button 
+              *ngIf="!authState.isAuthenticated() || authState.isAdminRole()"
               class="admin-toggle-btn" 
               [class.active]="authState.isAdminMode()"
               (click)="authState.toggleAdminMode()"
               title="Admin rejimini yoqish/o'chirish"
             >
-              {{ authState.isAdminMode() ? '🛡 Admin Rejimi' : '👤 Mijoz Rejimi' }}
+              {{ authState.isAdminMode() ? '&#9881; Admin Rejimi' : '&#128100; Mijoz Rejimi' }}
             </button>
+
+            <!-- 4. Boshqaruv paneli havolasi (faqat adminlar uchun) -->
+            <a 
+              *ngIf="authState.isAdminMode() && (!authState.isAuthenticated() || authState.isAdminRole())"
+              routerLink="/admin" 
+              class="top-dashboard-link"
+              title="Boshqaruv paneliga o'tish"
+            >
+              &#9881; Boshqaruv Paneli
+            </a>
           </div>
         </div>
       </div>
@@ -48,7 +89,7 @@ import { Customer } from '../../core/models/customer.model';
       <nav class="main-nav">
         <div class="nav-container">
           <a routerLink="/" class="brand-logo">
-            <div class="logo-icon">🛍</div>
+            <div class="logo-icon">&#128717;</div>
             <div class="logo-text">
               <span class="brand-name">Online<span>Shop</span></span>
               <span class="brand-tag">E-Commerce</span>
@@ -56,29 +97,28 @@ import { Customer } from '../../core/models/customer.model';
           </a>
 
           <div class="nav-links">
-            <a routerLink="/products" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-link">
+            <a routerLink="/products" routerLinkActive="active" class="nav-link">
               Mahsulotlar
-            </a>
-            <a routerLink="/categories" routerLinkActive="active" class="nav-link">
-              Kategoriyalar
             </a>
             <a routerLink="/companies" routerLinkActive="active" class="nav-link">
               Kompaniyalar
             </a>
+            <a routerLink="/categories" routerLinkActive="active" class="nav-link">
+              Kategoriyalar
+            </a>
             <a routerLink="/orders" routerLinkActive="active" class="nav-link">
               Buyurtmalar
             </a>
-            <a routerLink="/customers" routerLinkActive="active" class="nav-link">
-              Mijozlar
-            </a>
-            <a routerLink="/payments" routerLinkActive="active" class="nav-link placeholder-link" title="Backend kutilmoqda">
-              To'lovlar (Mock)
+            
+            <!-- ADMIN PANELLAR (Faqat Boshqaruv Rejimida ko'rinadi) -->
+            <a *ngIf="authState.isAdminMode() && (!authState.isAuthenticated() || authState.isAdminRole())" routerLink="/admin" routerLinkActive="active" class="nav-link admin-btn">
+              &#9881; Boshqaruv Paneli
             </a>
           </div>
 
-          <div class="nav-actions">
+          <div class="nav-actions" *ngIf="authState.canUseCart()">
             <a routerLink="/cart" class="cart-btn" routerLinkActive="active">
-              <span class="cart-icon">🛒</span>
+              <span class="cart-icon">&#128722;</span>
               <span class="cart-label">Savat</span>
               <span class="cart-badge" *ngIf="cartService.cartCount() > 0">
                 {{ cartService.cartCount() }}
@@ -118,6 +158,80 @@ import { Customer } from '../../core/models/customer.model';
       color: #cbd5e1;
       font-weight: 500;
     }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .auth-section {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .top-auth-link {
+      color: #cbd5e1;
+      font-weight: 600;
+      text-decoration: none;
+      transition: color 0.2s;
+      font-size: 0.75rem;
+    }
+    .top-auth-link:hover {
+      color: #ffffff;
+      text-decoration: underline;
+    }
+    .top-divider {
+      color: #475569;
+    }
+    .user-profile-section {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .user-badge-link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      color: #f1f5f9;
+      transition: opacity 0.2s;
+    }
+    .user-badge-link:hover {
+      opacity: 0.9;
+    }
+    .user-name {
+      font-size: 0.75rem;
+    }
+    .user-role-badge {
+      background: #3b82f6;
+      color: #ffffff;
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .user-role-badge.superadmin { background: #ef4444; }
+    .user-role-badge.companyadmin { background: #8b5cf6; }
+    .user-role-badge.branchmanager { background: #f59e0b; }
+    .user-role-badge.customer { background: #10b981; }
+
+    .logout-btn {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .logout-btn:hover {
+      background: #ef4444;
+      color: #ffffff;
+    }
+
     .customer-picker {
       display: flex;
       align-items: center;
@@ -144,9 +258,28 @@ import { Customer } from '../../core/models/customer.model';
       font-size: 0.75rem;
       font-weight: 600;
       transition: var(--transition);
+      cursor: pointer;
+      border: none;
     }
     .admin-toggle-btn.active {
       background: #2563eb;
+      color: #ffffff;
+    }
+    .top-dashboard-link {
+      background: #0ea5e9;
+      color: #ffffff;
+      padding: 0.25rem 0.625rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .top-dashboard-link:hover {
+      background: #0284c7;
       color: #ffffff;
     }
     .nav-container {
@@ -170,6 +303,7 @@ import { Customer } from '../../core/models/customer.model';
       padding: 0.25rem 0.5rem;
       border-radius: var(--radius-md);
     }
+    .logo-text { display: flex; flex-direction: column; }
     .brand-name {
       font-size: 1.25rem;
       font-weight: 800;
@@ -188,10 +322,12 @@ import { Customer } from '../../core/models/customer.model';
       font-weight: 700;
       margin-top: -3px;
     }
+
     .nav-links {
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      margin-left: auto;
     }
     .nav-link {
       padding: 0.5rem 0.875rem;
@@ -200,6 +336,7 @@ import { Customer } from '../../core/models/customer.model';
       color: var(--text-muted);
       border-radius: var(--radius-md);
       transition: var(--transition);
+      text-decoration: none;
     }
     .nav-link:hover {
       color: var(--primary);
@@ -210,10 +347,9 @@ import { Customer } from '../../core/models/customer.model';
       background-color: var(--primary-light);
       font-weight: 700;
     }
-    .placeholder-link {
-      font-style: italic;
-      color: #94a3b8;
-    }
+    .admin-btn { background-color: #1e293b !important; color: #f8fafc !important; }
+    .admin-btn:hover { background-color: #0f172a !important; }
+    
     .cart-btn {
       display: flex;
       align-items: center;
@@ -227,6 +363,7 @@ import { Customer } from '../../core/models/customer.model';
       color: var(--primary-dark);
       transition: var(--transition);
       position: relative;
+      text-decoration: none;
     }
     .cart-btn:hover {
       background-color: #dbeafe;
@@ -247,14 +384,24 @@ import { Customer } from '../../core/models/customer.model';
 export class NavbarComponent implements OnInit {
   cartService = inject(CartService);
   authState = inject(AuthStateService);
+  private authService = inject(AuthService);
   private customerService = inject(CustomerService);
+  private router = inject(Router);
 
   customers: Customer[] = [];
 
+
+  onLogout(): void {
+    this.authService.logout();
+    this.router.navigate(['/login']);
+  }
+
   ngOnInit(): void {
     this.loadCustomers();
-    // Preload active customer's cart
-    this.cartService.getByCustomerId(this.authState.currentCustomerId()).subscribe({ error: () => {} });
+    // Preload active customer's cart only if user can use cart
+    if (this.authState.canUseCart()) {
+      this.cartService.getByCustomerId(this.authState.currentCustomerId()).subscribe({ error: () => {} });
+    }
   }
 
   loadCustomers(): void {
@@ -277,7 +424,9 @@ export class NavbarComponent implements OnInit {
     if (found) {
       this.authState.setCustomer(found);
     }
-    // Refresh cart for new customer
-    this.cartService.getByCustomerId(id).subscribe({ error: () => {} });
+    // Refresh cart for new customer only if user can use cart
+    if (this.authState.canUseCart()) {
+      this.cartService.getByCustomerId(id).subscribe({ error: () => {} });
+    }
   }
 }

@@ -1,3 +1,4 @@
+import { AdminDashboardComponent } from './features/admin/admin-dashboard/admin-dashboard.component';
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
@@ -31,8 +32,32 @@ export const routes: Routes = [
     loadComponent: () => import('./features/companies/company-list/company-list.component').then(m => m.CompanyListComponent)
   },
   {
+    path: 'companies/:id',
+    loadComponent: () => import('./features/companies/company-detail/company-detail.component').then(m => m.CompanyDetailComponent)
+  },
+  {
+    path: 'branches/:id',
+    loadComponent: () => import('./features/companies/branch-detail/branch-detail.component').then(m => m.BranchDetailComponent)
+  },
+  {
     path: 'customers',
     loadComponent: () => import('./features/customers/customer-list/customer-list.component').then(m => m.CustomerListComponent)
+  },
+  {
+    path: 'login',
+    loadComponent: () => import('./features/auth/login/login.component').then(m => m.LoginComponent)
+  },
+  {
+    path: 'register',
+    loadComponent: () => import('./features/auth/register/register.component').then(m => m.RegisterComponent)
+  },
+  {
+    path: 'confirm-email',
+    loadComponent: () => import('./features/auth/confirm-email/confirm-email.component').then(m => m.ConfirmEmailComponent)
+  },
+  {
+    path: 'profile',
+    loadComponent: () => import('./features/profile/profile.component').then(m => m.ProfileComponent)
   },
   {
     path: 'payments',
@@ -43,6 +68,10 @@ export const routes: Routes = [
     path: 'order-items',
     loadComponent: () => import('./features/placeholders/placeholder.component').then(m => m.PlaceholderComponent),
     data: { type: 'order-items' }
+  },
+  {
+    path: 'admin',
+    component: AdminDashboardComponent
   },
   {
     path: '**',

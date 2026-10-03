@@ -1,8 +1,8 @@
-export interface Comment {
+﻿export interface Comment {
   id: number;
   content: string;
-  customerId: number;
-  customerName?: string;
+  userId: number;
+  userName?: string;
   productId: number;
   createdAt: string;
   updatedAt?: string;
@@ -11,7 +11,7 @@ export interface Comment {
 
 export interface CreateCommentDto {
   content: string;
-  customerId: number;
+  userId: number;
   productId: number;
   starRating: number;
 }
@@ -21,3 +21,4 @@ export interface UpdateCommentDto {
   content: string;
   starRating: number;
 }
+

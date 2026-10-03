@@ -42,7 +42,7 @@ import { RouterModule } from '@angular/router';
             <li><a routerLink="/customers">Mijozlar Boshqaruvi</a></li>
             <li><a routerLink="/payments">To'lovlar (Mock / Rejalashtirilgan)</a></li>
             <li><a routerLink="/order-items">OrderItem moduli (Skeleton)</a></li>
-            <li><a href="http://localhost:5099/swagger" target="_blank" rel="noopener">Backend Swagger API ↗</a></li>
+            <li><a href="https://localhost:7083/swagger/index.html" target="_blank" rel="noopener">Backend Swagger API ↗</a></li>
           </ul>
         </div>
       </div>

@@ -37,19 +37,30 @@ interface EnrichedCartItem extends CartItem {
         </div>
       </div>
 
-      <app-loading-spinner *ngIf="isLoading" message="Savat ma'lumotlari yuklanmoqda..."></app-loading-spinner>
+      <!-- Admin Notice if Admin visits Cart -->
+      <div *ngIf="!authState.canUseCart()" class="card" style="text-align: center; padding: 3.5rem 1.5rem; margin-top: 1.5rem; background: white; border-radius: 12px;">
+        <span style="font-size: 3.5rem; display: block; margin-bottom: 1rem;">&#128737;</span>
+        <h2 style="font-size: 1.5rem; margin-bottom: 0.75rem; color: #1e293b;">Boshqaruvchi uchun savat mavjud emas</h2>
+        <p style="color: #64748b; max-width: 520px; margin: 0 auto 1.5rem; line-height: 1.6; font-size: 0.95rem;">
+          Siz tizimga <strong>{{ authState.userRole() || 'Admin' }}</strong> sifatida kirgansiz. Savat va buyurtma berish xizmati faqat mijozlar (xaridorlar) uchun mo'ljallangan.
+        </p>
+        <button class="btn btn-primary" (click)="goToProducts()">Mahsulotlar katalogiga qaytish</button>
+      </div>
 
-      <app-empty-state 
-        *ngIf="!isLoading && enrichedItems.length === 0"
-        icon="🛒"
-        title="Savatingiz bo'sh"
-        description="Hozircha hech qanday mahsulot savatga qo'shilmagan."
-        actionText="Mahsulotlarni ko'rish"
-        (actionClick)="goToProducts()"
-      ></app-empty-state>
+      <ng-container *ngIf="authState.canUseCart()">
+        <app-loading-spinner *ngIf="isLoading" message="Savat ma'lumotlari yuklanmoqda..."></app-loading-spinner>
 
-      <!-- Cart Content -->
-      <div *ngIf="!isLoading && enrichedItems.length > 0" class="cart-layout">
+        <app-empty-state 
+          *ngIf="!isLoading && enrichedItems.length === 0"
+          icon="🛒"
+          title="Savatingiz bo'sh"
+          description="Hozircha hech qanday mahsulot savatga qo'shilmagan."
+          actionText="Mahsulotlarni ko'rish"
+          (actionClick)="goToProducts()"
+        ></app-empty-state>
+
+        <!-- Cart Content -->
+        <div *ngIf="!isLoading && enrichedItems.length > 0" class="cart-layout">
         <!-- Items Table / List -->
         <div class="cart-items-card card">
           <div class="table-header">
@@ -82,7 +93,7 @@ interface EnrichedCartItem extends CartItem {
             </div>
 
             <div class="price-cell">
-              {{ (item.product?.price || 0) | currency:'USD':'symbol':'1.2-2' }}
+              {{ (item.product?.price || 0) | number:'1.0-0' }} so'm
             </div>
 
             <div class="qty-cell">
@@ -102,7 +113,7 @@ interface EnrichedCartItem extends CartItem {
             </div>
 
             <div class="total-cell">
-              {{ ((item.product?.price || 0) * item.quantity) | currency:'USD':'symbol':'1.2-2' }}
+              {{ ((item.product?.price || 0) * item.quantity) | number:'1.0-0' }} so'm
             </div>
 
             <div class="action-cell">
@@ -135,7 +146,7 @@ interface EnrichedCartItem extends CartItem {
 
           <div class="summary-line total-line">
             <span>Umumiy Summa:</span>
-            <span class="total-val">{{ totalPrice | currency:'USD':'symbol':'1.2-2' }}</span>
+            <span class="total-val">{{ totalPrice | number:'1.0-0' }} so'm</span>
           </div>
 
           <!-- Checkout Branch Selector Form -->
@@ -163,6 +174,7 @@ interface EnrichedCartItem extends CartItem {
           </p>
         </div>
       </div>
+      </ng-container>
     </div>
   `,
   styles: [`
@@ -403,13 +415,18 @@ export class CartViewComponent implements OnInit {
   }
 
   loadCart(): void {
+    if (!this.authState.canUseCart()) {
+      this.isLoading = false;
+      return;
+    }
+
     this.isLoading = true;
     const customerId = this.authState.currentCustomerId();
 
     this.cartService.getByCustomerId(customerId).subscribe({
       next: (cart) => {
         this.rawCart = cart;
-        const items = cart?.items || [];
+        const items = cart?.cartItems || cart?.items || [];
         this.resolveProductDetails(items);
       },
       error: () => {

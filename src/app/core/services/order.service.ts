@@ -14,8 +14,8 @@ export class OrderService {
 
   createOrder(customerId: number, branchId: number): Observable<boolean> {
     return this.http.post<ResponseModel<boolean> | boolean>(
-      `${this.apiUrl}/Create?customerId=${customerId}&branchId=${branchId}`,
-      {}
+      `${this.apiUrl}/Create?userId=${customerId}&branchId=${branchId}`,
+      null
     ).pipe(
       map(res => {
         const unwrapped = unwrapResult(res);
@@ -45,7 +45,7 @@ export class OrderService {
   updateStatus(orderId: number, status: OrderStatus): Observable<boolean> {
     return this.http.put<ResponseModel<boolean> | boolean>(
       `${this.apiUrl}/UpdateStatus?orderId=${orderId}&status=${status}`,
-      {}
+      null
     ).pipe(
       map(res => unwrapResult(res) === true)
     );
@@ -54,7 +54,7 @@ export class OrderService {
   cancelOrder(orderId: number): Observable<boolean> {
     return this.http.put<ResponseModel<boolean> | boolean>(
       `${this.apiUrl}/Cancel?orderId=${orderId}`,
-      {}
+      null
     ).pipe(
       map(res => unwrapResult(res) === true)
     );

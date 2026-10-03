@@ -1,5 +1,8 @@
+import { CustomerService } from '../../../core/services/customer.service';
+import { Customer } from '../../../core/models/customer.model';
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Company, CreateCompanyDto, UpdateCompanyDto } from '../../../core/models/company.model';
 import { CompanyBranch, CreateCompanyBranchDto } from '../../../core/models/company-branch.model';
@@ -13,6 +16,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
   selector: 'app-company-list',
   standalone: true,
   imports: [
+    RouterModule,
     CommonModule, 
     ReactiveFormsModule, 
     LoadingSpinnerComponent, 
@@ -22,16 +26,16 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
     <div class="container">
       <div class="page-header">
         <div>
-          <h1 class="page-title">Kompaniyalar va Filiallar</h1>
-          <p class="page-subtitle">Hamkor kompaniyalar hamda ularga tegishli filiallar tarmog'i</p>
+          <h1 class="page-title">{{ authState.isCompanyAdmin() ? 'Mening Kompaniyam' : 'Kompaniyalar va Filiallar' }}</h1>
+          <p class="page-subtitle">{{ authState.isCompanyAdmin() ? 'Siz boshqarayotgan kompaniya va uning filiallari' : 'Hamkor kompaniyalar hamda ularga tegishli filiallar tarmoqlari' }}</p>
         </div>
 
         <div class="header-btns" *ngIf="authState.isAdminMode()">
           <button class="btn btn-secondary" (click)="openBranchModal()">
-            <span>🏢</span> Yangi Filial Qo'shish
+            <span>&#127970;</span> Yangi Filial Qo'shish
           </button>
-          <button class="btn btn-primary" (click)="openCompanyModal()">
-            <span>➕</span> Yangi Kompaniya
+          <button class="btn btn-primary" *ngIf="authState.isSuperAdmin()" (click)="openCompanyModal()">
+            <span>вћ•</span> Yangi Kompaniya
           </button>
         </div>
       </div>
@@ -40,7 +44,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
       <app-empty-state 
         *ngIf="!isLoading && companies.length === 0"
-        icon="🏢"
+        icon="&#127970;"
         title="Kompaniyalar topilmadi"
         description="Hozircha tizimda birorta ham kompaniya mavjud emas."
         [actionText]="emptyActionText"
@@ -51,22 +55,31 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
       <div class="companies-grid" *ngIf="!isLoading && companies.length > 0">
         <div class="company-card card" *ngFor="let company of companies">
           <div class="card-top">
-            <div class="company-icon">🏢</div>
+            <div class="company-icon">&#127970;</div>
             <div class="company-title-wrap">
-              <h3 class="company-name">{{ company.name }}</h3>
+              <h3 class="company-name" [routerLink]="['/companies', company.id]" style="cursor: pointer;" title="Kompaniya sahifasiga kirish">
+                {{ company.name }} &rarr;
+              </h3>
               <span class="inn-badge">INN: {{ company.inn }}</span>
             </div>
           </div>
 
           <div class="company-details">
             <div class="detail-item">
-              <span class="detail-icon">📍</span>
+              <span class="detail-icon">&#128205;</span>
               <span class="detail-text">{{ company.address }}</span>
             </div>
             <div class="detail-item">
-              <span class="detail-icon">📞</span>
+              <span class="detail-icon">&#128222;</span>
               <span class="detail-text">{{ company.phoneNumber }}</span>
             </div>
+          </div>
+
+          <!-- Direct Company Link Button -->
+          <div style="margin: 0.5rem 0;">
+            <a [routerLink]="['/companies', company.id]" class="btn btn-outline-primary btn-sm" style="width: 100%; text-align: center; text-decoration: none; display: block;">
+              &#128065; Kompaniya va Filiallarini ko'rish &rarr;
+            </a>
           </div>
 
           <!-- Branches Section -->
@@ -77,7 +90,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                 class="view-branches-btn"
                 (click)="toggleBranches(company)"
               >
-                {{ expandedCompanyId === company.id ? 'Yopish ▲' : ('Filiallar (' + getBranchesCount(company.id) + ') ▼') }}
+                {{ expandedCompanyId === company.id ? "Yopish &#9650;" : ("Filiallar (" + getBranchesCount(company.id) + ") &#9660;") }}
               </button>
             </div>
 
@@ -89,27 +102,111 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                 Ushbu kompaniyada filiallar mavjud emas.
               </div>
 
-              <div class="branch-item" *ngFor="let branch of companyBranches[company.id]">
+              <div class="branch-item" *ngFor="let branch of companyBranches[company.id]" [routerLink]="['/branches', branch.id]" style="cursor: pointer;" title="Filial ichiga kirish (Mahsulotlar, Xodimlar)">
                 <div class="branch-name-row">
-                  <span class="b-name">{{ branch.name }}</span>
+                  <span class="b-name">&#127970; {{ branch.name }}</span>
                   <span class="b-id">#{{ branch.id }}</span>
+                  <span style="color: #2563eb; font-weight: bold; margin-left: auto;">&rarr;</span>
                 </div>
-                <div class="b-address">📍 {{ branch.address }}</div>
-                <div class="b-phone" *ngIf="branch.phoneNumber">📞 {{ branch.phoneNumber }}</div>
-                <div class="b-loc" *ngIf="branch.location">🌐 {{ branch.location }}</div>
+                <div class="b-address">&#128205; {{ branch.address }}</div>
+                <div class="b-phone" *ngIf="branch.phoneNumber">&#128222; {{ branch.phoneNumber }}</div>
+                <div class="b-loc" *ngIf="branch.location">&#127760; {{ branch.location }}</div>
               </div>
             </div>
           </div>
 
           <!-- Admin Actions -->
           <div class="company-actions" *ngIf="authState.isAdminMode()">
-            <button class="btn btn-secondary btn-sm" (click)="openEditCompanyModal(company)">
-              ✏ Tahrirlash
+            <button class="btn btn-info btn-sm" [routerLink]="['/companies', company.id]">
+              &#128065; Kirish
             </button>
-            <button class="btn btn-danger btn-sm" (click)="deleteCompany(company)">
-              🗑 O'chirish
+            <button class="btn btn-primary btn-sm" (click)="openAssignAdminModal(company)" *ngIf="authState.isSuperAdmin()" title="Kompaniyaga admin tayinlash">
+              &#128100; Admin
+            </button>
+            <button class="btn btn-secondary btn-sm" (click)="openEditCompanyModal(company)">
+              &#9998; Tahrirlash
+            </button>
+            <button class="btn btn-danger btn-sm" *ngIf="authState.isSuperAdmin()" (click)="deleteCompany(company)">
+              &#128465; O'chirish
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- COMPANY ADMIN VIEW -->
+      <div class="company-admin-dashboard" *ngIf="!isLoading && companies.length > 0 && authState.isCompanyAdmin()">
+        <div class="company-header-card card">
+           <div class="card-top" style="margin-bottom: 0;">
+              <div class="company-icon">&#128188;</div>
+              <div class="company-title-wrap">
+                <h3 class="company-name" style="font-size: 1.5rem;">{{ companies[0].name }}</h3>
+                <span class="inn-badge">INN: {{ companies[0].inn }}</span>
+              </div>
+              <button class="btn btn-secondary" style="margin-left: auto;" (click)="openEditCompanyModal(companies[0])">
+                &#9998; Tahrirlash
+              </button>
+           </div>
+           <div class="company-details" style="display: flex; gap: 2rem; margin-top: 1.5rem;">
+              <div class="detail-item">
+                <span class="detail-icon">&#128205;</span>
+                <span class="detail-text">{{ companies[0].address }}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-icon">&#128222;</span>
+                <span class="detail-text">{{ companies[0].phoneNumber }}</span>
+              </div>
+           </div>
+        </div>
+
+        <h2 class="branches-section-title">Barcha Filiallar ({{ getBranchesCount(companies[0].id) }})</h2>
+        
+        <div *ngIf="isBranchLoading" class="branch-loading card" style="text-align: center; padding: 2rem;">Yuklanmoqda...</div>
+        <div *ngIf="!isBranchLoading && (!companyBranches[companies[0].id] || companyBranches[companies[0].id].length === 0)" class="no-branch card" style="text-align: center; padding: 2rem;">
+          Hozircha filiallar qo'shilmagan.
+        </div>
+
+        <div class="branches-dashboard-grid" *ngIf="companyBranches[companies[0].id] && companyBranches[companies[0].id].length > 0">
+           <div class="branch-card card" *ngFor="let branch of companyBranches[companies[0].id]" [routerLink]="['/branches', branch.id]" style="cursor: pointer;">
+                <div class="branch-name-row">
+                  <span class="b-name" style="font-size: 1.25rem;">{{ branch.name }}</span>
+                  <span class="b-id">#{{ branch.id }}</span>
+                </div>
+                <div class="b-address" style="margin-top: 0.75rem;">&#128205; {{ branch.address }}</div>
+                <div class="b-phone" *ngIf="branch.phoneNumber">&#128222; {{ branch.phoneNumber }}</div>
+                <div class="b-loc" *ngIf="branch.location">&#127760; {{ branch.location }}</div>
+           </div>
+        </div>
+      </div>
+
+      <!-- Assign Admin Modal -->
+      <div class="modal-overlay" *ngIf="showAdminModal" (click)="closeAdminModal()">
+        <div class="modal-content" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3 class="modal-title">Admin Tayinlash ({{ adminCompany?.name }})</h3>
+            <button class="modal-close" (click)="closeAdminModal()">&times;</button>
+          </div>
+
+          <form [formGroup]="adminForm" (ngSubmit)="submitAdmin()" class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Foydalanuvchini tanlang *</label>
+              <select class="form-control" id="userId" name="userId" formControlName="userId">
+                <option [ngValue]="null" disabled>Foydalanuvchini tanlang</option>
+                <option *ngFor="let c of customersList" [value]="c.id">
+                  {{ c.name }} ({{ c.email }})
+                </option>
+              </select>
+              <div class="form-error" *ngIf="adminForm.get('userId')?.touched && adminForm.get('userId')?.invalid">
+                Foydalanuvchini tanlash shart.
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeAdminModal()" [disabled]="isSubmittingAdmin">Bekor qilish</button>
+              <button type="submit" class="btn btn-primary" [disabled]="adminForm.invalid || isSubmittingAdmin">
+                {{ isSubmittingAdmin ? 'Saqlanmoqda...' : 'Tayinlash' }}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -118,15 +215,15 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
         <div class="modal-content" (click)="$event.stopPropagation()">
           <div class="modal-header">
             <h3 class="modal-title">
-              {{ editingCompany ? 'Kompaniyani Tahrirlash' : 'Yangi Kompaniya Qo‘shish' }}
+              {{ editingCompany ? 'Kompaniyani Tahrirlash' : 'Yangi Kompaniya QoвЂshish' }}
             </h3>
-            <button class="modal-close" (click)="closeCompanyModal()">✕</button>
+            <button class="modal-close" (click)="closeCompanyModal()">&times;</button>
           </div>
 
           <form [formGroup]="companyForm" (ngSubmit)="submitCompany()" class="modal-body">
             <div class="form-group">
               <label class="form-label">Kompaniya Nomi *</label>
-              <input type="text" class="form-control" formControlName="name" placeholder="Masalan: Artel Electronics" />
+              <input type="text" class="form-control" id="name" name="name" formControlName="name" placeholder="Masalan: Artel Electronics" />
               <div class="form-error" *ngIf="companyForm.get('name')?.touched && companyForm.get('name')?.invalid">
                 Kompaniya nomi kamida 2 ta belgi bo'lishi kerak.
               </div>
@@ -135,7 +232,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">INN Raqami *</label>
-                <input type="text" class="form-control" formControlName="inn" placeholder="123456789" />
+                <input type="text" class="form-control" id="inn" name="inn" formControlName="inn" placeholder="123456789" />
                 <div class="form-error" *ngIf="companyForm.get('inn')?.touched && companyForm.get('inn')?.invalid">
                   INN kiritilishi shart.
                 </div>
@@ -143,7 +240,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
               <div class="form-group">
                 <label class="form-label">Telefon Raqami *</label>
-                <input type="text" class="form-control" formControlName="phoneNumber" placeholder="+998 90 123 45 67" />
+                <input type="text" class="form-control" id="phoneNumber" name="phoneNumber" formControlName="phoneNumber" placeholder="+998 90 123 45 67" />
                 <div class="form-error" *ngIf="companyForm.get('phoneNumber')?.touched && companyForm.get('phoneNumber')?.invalid">
                   Telefon raqam kiritilishi shart.
                 </div>
@@ -152,7 +249,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
             <div class="form-group">
               <label class="form-label">Manzil *</label>
-              <input type="text" class="form-control" formControlName="address" placeholder="Toshkent sh., Yunusobod tumani" />
+              <input type="text" class="form-control" id="address" name="address" formControlName="address" placeholder="Toshkent sh., Yunusobod tumani" />
               <div class="form-error" *ngIf="companyForm.get('address')?.touched && companyForm.get('address')?.invalid">
                 Manzil kiritilishi shart.
               </div>
@@ -173,13 +270,13 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
         <div class="modal-content" (click)="$event.stopPropagation()">
           <div class="modal-header">
             <h3 class="modal-title">Yangi Filial Qo'shish</h3>
-            <button class="modal-close" (click)="closeBranchModal()">✕</button>
+            <button class="modal-close" (click)="closeBranchModal()">&times;</button>
           </div>
 
           <form [formGroup]="branchForm" (ngSubmit)="submitBranch()" class="modal-body">
             <div class="form-group">
               <label class="form-label">Tegishli Kompaniya *</label>
-              <select class="form-control" formControlName="companyId">
+              <select class="form-control" id="companyId" name="companyId" formControlName="companyId">
                 <option [ngValue]="null" disabled>Kompaniyani tanlang</option>
                 <option *ngFor="let c of companies" [value]="c.id">{{ c.name }}</option>
               </select>
@@ -190,7 +287,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
             <div class="form-group">
               <label class="form-label">Filial Nomi *</label>
-              <input type="text" class="form-control" formControlName="name" placeholder="Masalan: Chilonzor Filiali" />
+              <input type="text" class="form-control" id="name" name="name" formControlName="name" placeholder="Masalan: Chilonzor Filiali" />
               <div class="form-error" *ngIf="branchForm.get('name')?.touched && branchForm.get('name')?.invalid">
                 Filial nomi kiritilishi shart.
               </div>
@@ -199,18 +296,18 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Telefon Raqami *</label>
-                <input type="text" class="form-control" formControlName="phoneNumber" placeholder="+998 90 987 65 43" />
+                <input type="text" class="form-control" id="phoneNumber" name="phoneNumber" formControlName="phoneNumber" placeholder="+998 90 987 65 43" />
               </div>
 
               <div class="form-group">
                 <label class="form-label">Lokatsiya (Kordinata / Shahar)</label>
-                <input type="text" class="form-control" formControlName="location" placeholder="41.2995, 69.2401" />
+                <input type="text" class="form-control" id="location" name="location" formControlName="location" placeholder="41.2995, 69.2401" />
               </div>
             </div>
 
             <div class="form-group">
               <label class="form-label">Manzil *</label>
-              <input type="text" class="form-control" formControlName="address" placeholder="Chilonzor 9-mavze, 12-uy" />
+              <input type="text" class="form-control" id="address" name="address" formControlName="address" placeholder="Chilonzor 9-mavze, 12-uy" />
             </div>
 
             <div class="modal-footer">
@@ -398,6 +495,14 @@ export class CompanyListComponent implements OnInit {
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
   private fb = inject(FormBuilder);
+  private customerService = inject(CustomerService);
+
+  // Admin Assign State
+  showAdminModal = false;
+  adminCompany: Company | null = null;
+  adminForm!: FormGroup;
+  isSubmittingAdmin = false;
+  customersList: Customer[] = [];
 
   companies: Company[] = [];
   companyBranches: Record<number, CompanyBranch[]> = {};
@@ -428,6 +533,9 @@ export class CompanyListComponent implements OnInit {
   }
 
   private initForms(): void {
+    this.adminForm = this.fb.group({
+      userId: [null, Validators.required]
+    });
     this.companyForm = this.fb.group({
       name: ['', [Validators.required, Validators.minLength(2)]],
       inn: ['', Validators.required],
@@ -486,6 +594,47 @@ export class CompanyListComponent implements OnInit {
         });
       }
     }
+  }
+
+  openAssignAdminModal(company: Company): void {
+    this.adminCompany = company;
+    this.adminForm.reset();
+    
+    // Fetch users for dropdown
+    this.customerService.getAll().subscribe({
+      next: (users) => {
+        this.customersList = users;
+        this.showAdminModal = true;
+      },
+      error: () => {
+        this.notification.error("Foydalanuvchilarni yuklashda xatolik yuz berdi.");
+      }
+    });
+  }
+
+  closeAdminModal(): void {
+    this.showAdminModal = false;
+    this.adminCompany = null;
+  }
+
+  submitAdmin(): void {
+    if (this.adminForm.invalid || !this.adminCompany) return;
+    
+    this.isSubmittingAdmin = true;
+    const userId = this.adminForm.value.userId;
+    const companyId = this.adminCompany.id;
+
+    this.customerService.assignCompanyAdmin(userId, companyId).subscribe({
+      next: () => {
+        this.notification.success('Foydalanuvchi muvaffaqiyatli ' + this.adminCompany?.name + ' ga admin qilib tayinlandi!');
+        this.isSubmittingAdmin = false;
+        this.closeAdminModal();
+      },
+      error: (err) => {
+        this.isSubmittingAdmin = false;
+        this.notification.error(err?.error?.message || 'Admin tayinlashda xatolik yuz berdi. Balki limit (3) ga yetilgan.');
+      }
+    });
   }
 
   openCompanyModal(): void {
@@ -605,3 +754,8 @@ export class CompanyListComponent implements OnInit {
     });
   }
 }
+
+
+
+
+

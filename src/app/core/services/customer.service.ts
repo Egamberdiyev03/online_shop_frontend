@@ -10,7 +10,7 @@ import { ResponseModel, unwrapResult } from '../models/response.model';
 })
 export class CustomerService {
   private http = inject(HttpClient);
-  private apiUrl = `${environment.apiUrl}/Customer`;
+  private apiUrl = `${environment.apiUrl}/User`;
 
   getAll(): Observable<Customer[]> {
     return this.http.get<Customer[] | ResponseModel<Customer[]>>(`${this.apiUrl}/GetAll`).pipe(
@@ -39,6 +39,28 @@ export class CustomerService {
   delete(id: number): Observable<boolean> {
     return this.http.delete<ResponseModel<boolean> | boolean>(`${this.apiUrl}/Delete?id=${id}`).pipe(
       map(res => unwrapResult(res) === true)
+    );
+  }
+
+  assignCompanyAdmin(userId: number, companyId: number): Observable<any> { 
+    return this.http.post<any>(this.apiUrl + '/AssignCompanyAdmin?userId=' + userId + '&companyId=' + companyId, null); 
+  }
+
+  removeCompanyAdmin(userId: number): Observable<any> { 
+    return this.http.post<any>(this.apiUrl + '/RemoveCompanyAdmin?userId=' + userId, null); 
+  }
+
+  assignBranchManager(userId: number, branchId: number): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/AssignBranchManager?userId=${userId}&branchId=${branchId}`, null);
+  }
+
+  removeBranchManager(userId: number): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/RemoveBranchManager?userId=${userId}`, null);
+  }
+
+  getUsersByBranchId(branchId: number): Observable<Customer[]> {
+    return this.http.get<ResponseModel<Customer[]> | Customer[]>(`${this.apiUrl}/GetUsersByBranchId?branchId=${branchId}`).pipe(
+      map(res => unwrapResult(res) || [])
     );
   }
 }

@@ -61,26 +61,26 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
             <div class="meta-row">
               <span class="stock-status" [class.in-stock]="product.quantity > 0" [class.out]="product.quantity <= 0">
-                ● {{ product.quantity > 0 ? 'Omborda mavjud: ' + product.quantity + ' dona' : 'Omborda tugagan' }}
+                &#9679; {{ product.quantity > 0 ? ('Omborda mavjud: ' + product.quantity + ' dona') : 'Omborda tugagan' }}
               </span>
               <span class="branch-pill" *ngIf="product.companyBranchId">
-                🏢 Filial: #{{ product.companyBranchId }}
+                &#127970; Filial: #{{ product.companyBranchId }}
               </span>
             </div>
 
             <div class="price-box">
-              <span class="price-val">{{ product.price | currency:'USD':'symbol':'1.2-2' }}</span>
+              <span class="price-val">{{ product.price | number:'1.0-0' }} so'm</span>
             </div>
 
             <div class="description-box">
               <h4 class="section-heading">Tavsif</h4>
               <p class="description-text">
-                {{ product.description || 'Ushbu mahsulot uchun qo\'shimcha tavsif berilmagan.' }}
+                {{ product.description || "Ushbu mahsulot uchun qo'shimcha tavsif berilmagan." }}
               </p>
             </div>
 
-            <!-- Add to Cart Flow -->
-            <div class="purchase-box">
+            <!-- Add to Cart Flow (Faqat mijozlar uchun) -->
+            <div class="purchase-box" *ngIf="authState.canUseCart()">
               <div class="quantity-picker">
                 <button 
                   class="qty-btn" 
@@ -100,9 +100,15 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                 [disabled]="product.quantity <= 0 || isAddingToCart"
                 (click)="addToCart()"
               >
-                <span>🛒</span>
+                <span>&#128722;</span>
                 <span>{{ addToCartBtnText }}</span>
               </button>
+            </div>
+
+            <!-- Admin bo'lsa xabar -->
+            <div class="admin-notice-box" *ngIf="!authState.canUseCart()">
+              <span class="admin-notice-badge">&#128737; Boshqaruvchi Rejimi</span>
+              <p>Siz admin sifatida kirdingiz. Savat va xarid qilish faqat xaridorlar (mijozlar) uchun mo'ljallangan.</p>
             </div>
           </div>
         </div>
@@ -169,7 +175,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
           <div class="comments-list">
             <app-empty-state 
               *ngIf="comments.length === 0"
-              icon="💬"
+              icon="&#128172;"
               title="Hali sharhlar yo'q"
               description="Ushbu mahsulotga birinchi bo'lib sharh qoldiring!"
             ></app-empty-state>
@@ -177,10 +183,10 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
             <div class="comment-item" *ngFor="let comment of comments">
               <div class="comment-meta">
                 <div class="user-avatar">
-                  {{ (comment.customerName || 'M').charAt(0).toUpperCase() }}
+                  {{ (comment.userName || 'M').charAt(0).toUpperCase() }}
                 </div>
                 <div class="user-details">
-                  <div class="user-name">{{ comment.customerName || ('Mijoz #' + comment.customerId) }}</div>
+                  <div class="user-name">{{ comment.userName || ('Mijoz #' + comment.userId) }}</div>
                   <div class="comment-date">{{ comment.createdAt | date:'mediumDate' }}</div>
                 </div>
                 <div class="comment-stars">
@@ -191,12 +197,12 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
               <p class="comment-content">{{ comment.content }}</p>
 
               <button 
-                *ngIf="authState.isAdminMode() || comment.customerId === authState.currentCustomerId()" 
+                *ngIf="authState.isAdminMode() || comment.userId === authState.currentCustomerId()" 
                 class="delete-comment-btn"
                 (click)="deleteComment(comment.id)"
                 title="Sharhni o'chirish"
               >
-                ✕ O'chirish
+                &times; O'chirish
               </button>
             </div>
           </div>
@@ -363,6 +369,29 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
     }
     .add-btn {
       flex: 1;
+    }
+    .admin-notice-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-md);
+      padding: 1rem 1.25rem;
+      margin-top: auto;
+    }
+    .admin-notice-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #1e40af;
+      background: #dbeafe;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.35rem;
+    }
+    .admin-notice-box p {
+      font-size: 0.875rem;
+      color: #334155;
+      margin: 0;
+      line-height: 1.4;
     }
     .comments-section {
       padding: 2rem;
@@ -585,7 +614,7 @@ export class ProductDetailComponent implements OnInit {
     // Context-based ProductId as mandated in brief:
     const dto: CreateCommentDto = {
       productId: this.product.id,
-      customerId: this.authState.currentCustomerId(),
+      userId: this.authState.currentCustomerId(),
       content: this.commentForm.value.content,
       starRating: this.selectedStarRating
     };
@@ -620,3 +649,6 @@ export class ProductDetailComponent implements OnInit {
     });
   }
 }
+
+
+

@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+﻿import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Order, OrderStatus } from '../../../core/models/order.model';
@@ -26,39 +26,23 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
       <div class="page-header">
         <div>
           <h1 class="page-title">
-            {{ viewMode === 'my' ? 'Mening Buyurtmalarim' : 'Barcha Buyurtmalar (Admin)' }}
+            {{ viewMode === 'my' ? 'Mening Buyurtmalarim' : "Kompaniyalar bo'yicha buyurtmalar" }}
           </h1>
           <p class="page-subtitle">
             {{ viewMode === 'my' 
                 ? 'Mijoz #' + authState.currentCustomerId() + ' hisobidagi buyurtmalar tarixi va holati' 
-                : 'Tizimdagi barcha filial va mijozlarning buyurtmalari boshqaruvi' }}
+                : 'Tizimdagi filiallar va mijozlarning buyurtmalari boshqaruvi' }}
           </p>
         </div>
 
         <!-- Mode Toggle (if admin mode is enabled) -->
-        <div class="mode-toggle" *ngIf="authState.isAdminMode()">
-          <button 
-            class="toggle-btn" 
-            [class.active]="viewMode === 'my'"
-            (click)="setViewMode('my')"
-          >
-            👤 Mening buyurtmalarim
-          </button>
-          <button 
-            class="toggle-btn" 
-            [class.active]="viewMode === 'all'"
-            (click)="setViewMode('all')"
-          >
-            🛡 Barcha buyurtmalar
-          </button>
         </div>
-      </div>
 
       <!-- Admin Filters -->
       <div class="filter-bar card" *ngIf="viewMode === 'all'">
         <div class="filter-col">
           <label class="filter-label">Filial bo'yicha:</label>
-          <select [(ngModel)]="filterBranchId" (ngModelChange)="loadOrders()" class="form-control">
+          <select [(ngModel)]="filterBranchId" (ngModelChange)="loadOrders()" class="form-control" [disabled]="authState.isBranchManager()">
             <option [ngValue]="null">Barcha filiallar</option>
             <option *ngFor="let branch of branches" [ngValue]="branch.id">
               {{ branch.name }} (#{{ branch.id }})
@@ -83,7 +67,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
       <app-empty-state 
         *ngIf="!isLoading && orders.length === 0"
-        icon="📦"
+        icon="&#128203;"
         title="Buyurtmalar mavjud emas"
         description="Hozircha hech qanday buyurtma ro'yxatga olinmagan."
       ></app-empty-state>
@@ -102,7 +86,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                 Mijoz #{{ order.customerId }}
               </span>
               <span class="branch-tag" *ngIf="order.companyBranchId">
-                Filial #{{ order.companyBranchId }}
+                {{ getBranchName(order.companyBranchId) }}
               </span>
               <app-status-badge [status]="order.status"></app-status-badge>
             </div>
@@ -125,8 +109,8 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                   <td>#{{ item.productId }}</td>
                   <td class="item-name">{{ item.productName || ('Mahsulot #' + item.productId) }}</td>
                   <td class="text-center">{{ item.quantity }} dona</td>
-                  <td class="text-right">{{ item.unitPrice | currency:'USD':'symbol':'1.2-2' }}</td>
-                  <td class="text-right fw-bold">{{ (item.unitPrice * item.quantity) | currency:'USD':'symbol':'1.2-2' }}</td>
+                  <td class="text-right">{{ item.unitPrice | number:'1.0-0' }} so'm</td>
+                  <td class="text-right fw-bold">{{ (item.unitPrice * item.quantity) | number:'1.0-0' }} so'm</td>
                 </tr>
               </tbody>
             </table>
@@ -140,7 +124,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
           <div class="order-footer">
             <div class="total-wrap">
               <span class="total-label">Jami to'lov:</span>
-              <span class="total-amount">{{ order.totalPrice | currency:'USD':'symbol':'1.2-2' }}</span>
+              <span class="total-amount">{{ order.totalPrice | number:'1.0-0' }} so'm</span>
             </div>
 
             <div class="order-actions">
@@ -151,7 +135,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                 [disabled]="cancellingOrderId === order.id"
                 (click)="cancelOrder(order)"
               >
-                {{ cancellingOrderId === order.id ? 'Bekor qilinmoqda...' : '✕ Buyurtmani bekor qilish' }}
+                {{ cancellingOrderId === order.id ? 'Bekor qilinmoqda...' : '&#10006; Buyurtmani bekor qilish' }}
               </button>
 
               <!-- Admin Status Change Dropdown -->
@@ -309,8 +293,8 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
       font-weight: 600;
       color: var(--text-main);
     }
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
+    .text-center { text-align: center !important; }
+    .text-right { text-align: right !important; }
     .fw-bold { font-weight: 700; color: var(--secondary); }
     .no-items-note {
       font-size: 0.8125rem;
@@ -382,19 +366,26 @@ export class OrdersListComponent implements OnInit {
   filterStatus: OrderStatus | null = null;
   cancellingOrderId: number | null = null;
 
-  ngOnInit(): void {
-    this.loadBranches();
-    this.loadOrders();
-  }
+  ngOnInit(): void { this.loadBranches(); if (this.authState.isAdminMode()) { this.viewMode = 'all'; } if (this.authState.isBranchManager()) { this.filterBranchId = this.authState.userBranchId(); this.viewMode = 'all'; } this.loadOrders(); }
 
   setViewMode(mode: 'my' | 'all'): void {
     this.viewMode = mode;
     this.loadOrders();
   }
 
-  loadBranches(): void {
+    loadBranches(): void {
     this.companyService.getAllBranches().subscribe({
-      next: (branches) => (this.branches = branches),
+      next: (branches) => {
+        if (this.authState.isCompanyAdmin()) {
+          const cId = this.authState.userCompanyId();
+          this.branches = branches.filter(b => b.companyId === cId);
+        } else if (this.authState.isBranchManager()) {
+          const bId = this.authState.userBranchId();
+          this.branches = branches.filter(b => b.id === bId);
+        } else {
+          this.branches = branches;
+        }
+      },
       error: () => {}
     });
   }
@@ -435,10 +426,15 @@ export class OrdersListComponent implements OnInit {
         });
       } else {
         this.orderService.getAll().subscribe({
-          next: (orders) => {
-            this.orders = orders;
-            this.isLoading = false;
-          },
+            next: (orders) => {
+              if (this.authState.isSuperAdmin()) {
+                this.orders = orders;
+              } else {
+                const branchIds = this.branches.map(b => b.id);
+                this.orders = orders.filter(o => branchIds.includes(o.companyBranchId));
+              }
+              this.isLoading = false;
+            },
           error: () => {
             this.isLoading = false;
           }
@@ -450,6 +446,11 @@ export class OrdersListComponent implements OnInit {
   canCancel(status: OrderStatus | number): boolean {
     // Only allow cancellation for Pending (0) or Confirmed (1)
     return status === OrderStatus.Pending || status === OrderStatus.Confirmed;
+  }
+
+  getBranchName(branchId: number): string {
+    const branch = this.branches.find(b => b.id === branchId);
+    return branch ? (branch.name || branch.address || `Filial #${branchId}`) : `Filial #${branchId}`;
   }
 
   cancelOrder(order: Order): void {
@@ -482,3 +483,20 @@ export class OrdersListComponent implements OnInit {
     });
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

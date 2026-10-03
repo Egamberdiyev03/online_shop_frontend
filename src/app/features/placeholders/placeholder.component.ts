@@ -55,7 +55,7 @@ import { RouterModule } from '@angular/router';
           <a routerLink="/products" class="btn btn-primary">
             🛍 Mahsulotlarga qaytish
           </a>
-          <a href="http://localhost:5099/swagger" target="_blank" rel="noopener" class="btn btn-secondary">
+          <a href="https://localhost:7083/swagger/index.html" target="_blank" rel="noopener" class="btn btn-secondary">
             Swagger API hujjatini ko'rish ↗
           </a>
         </div>

@@ -1,10 +1,11 @@
-import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
+﻿import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Product, CreateProductDto, UpdateProductDto } from '../../../core/models/product.model';
 import { Category } from '../../../core/models/category.model';
 import { CompanyBranch } from '../../../core/models/company-branch.model';
 import { CategoryService } from '../../../core/services/category.service';
+import { AuthStateService } from '../../../core/services/auth-state.service';
 import { CompanyService } from '../../../core/services/company.service';
 
 @Component({
@@ -18,7 +19,7 @@ import { CompanyService } from '../../../core/services/company.service';
           <h3 class="modal-title">
             {{ modalTitle }}
           </h3>
-          <button class="modal-close" (click)="onCancel()">✕</button>
+          <button class="modal-close" (click)="onCancel()">&times;</button>
         </div>
 
         <form [formGroup]="form" (ngSubmit)="onSubmit()" class="modal-body">
@@ -27,7 +28,7 @@ import { CompanyService } from '../../../core/services/company.service';
             <input 
               type="text" 
               class="form-control" 
-              formControlName="name" 
+              id="name" name="name" formControlName="name" 
               placeholder="Masalan: iPhone 15 Pro"
             />
             <div class="form-error" *ngIf="form.get('name')?.touched && form.get('name')?.invalid">
@@ -41,7 +42,7 @@ import { CompanyService } from '../../../core/services/company.service';
               <input 
                 type="number" 
                 class="form-control" 
-                formControlName="price" 
+                id="price" name="price" formControlName="price" 
                 placeholder="0.00"
                 min="0"
                 step="0.01"
@@ -56,7 +57,7 @@ import { CompanyService } from '../../../core/services/company.service';
               <input 
                 type="number" 
                 class="form-control" 
-                formControlName="quantity" 
+                id="quantity" name="quantity" formControlName="quantity" 
                 placeholder="0"
                 min="0"
               />
@@ -69,7 +70,7 @@ import { CompanyService } from '../../../core/services/company.service';
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Kategoriya *</label>
-              <select class="form-control" formControlName="categoryId">
+              <select class="form-control" id="categoryId" name="categoryId" formControlName="categoryId">
                 <option [ngValue]="null" disabled>Kategoriya tanlang</option>
                 <option *ngFor="let cat of categories" [value]="cat.id">
                   {{ cat.title }}
@@ -82,7 +83,7 @@ import { CompanyService } from '../../../core/services/company.service';
 
             <div class="form-group">
               <label class="form-label">Filial (Branch) *</label>
-              <select class="form-control" formControlName="companyBranchId">
+              <select class="form-control" id="companyBranchId" name="companyBranchId" formControlName="companyBranchId">
                 <option [ngValue]="null" disabled>Filial tanlang</option>
                 <option *ngFor="let branch of branches" [value]="branch.id">
                   {{ branch.name }} (#{{ branch.id }})
@@ -99,7 +100,7 @@ import { CompanyService } from '../../../core/services/company.service';
             <input 
               type="text" 
               class="form-control" 
-              formControlName="image" 
+              id="image" name="image" formControlName="image" 
               placeholder="https://images.unsplash.com/..."
             />
           </div>
@@ -180,6 +181,7 @@ export class ProductFormModalComponent implements OnInit {
   private fb = inject(FormBuilder);
   private categoryService = inject(CategoryService);
   private companyService = inject(CompanyService);
+  public authState = inject(AuthStateService);
 
   form!: FormGroup;
   categories: Category[] = [];
@@ -212,14 +214,28 @@ export class ProductFormModalComponent implements OnInit {
     });
   }
 
-  private loadDropdownData(): void {
+    private loadDropdownData(): void {
     this.categoryService.getAll().subscribe({
       next: (cats) => (this.categories = cats),
       error: () => {}
     });
 
     this.companyService.getAllBranches().subscribe({
-      next: (b) => (this.branches = b),
+      next: (branches) => {
+        const authState = this.authState;
+        if (authState.isCompanyAdmin()) {
+          const cId = authState.userCompanyId();
+          this.branches = branches.filter(b => b.companyId === cId);
+        } else if (authState.isBranchManager()) {
+          const bId = authState.userBranchId();
+          this.branches = branches.filter(b => b.id === bId);
+          this.form.patchValue({ companyBranchId: bId });
+          // Optionally disable it so they can't even try to change it in dev tools
+          // this.form.get('companyBranchId')?.disable();
+        } else {
+          this.branches = branches;
+        }
+      },
       error: () => {}
     });
   }
@@ -259,3 +275,5 @@ export class ProductFormModalComponent implements OnInit {
     this.cancel.emit();
   }
 }
+
+

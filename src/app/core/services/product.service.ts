@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Product, CreateProductDto, UpdateProductDto } from '../models/product.model';
+import { Product, CreateProductDto, UpdateProductDto, PagedResult } from '../models/product.model';
 import { ResponseModel, unwrapResult } from '../models/response.model';
 
 @Injectable({
@@ -15,6 +15,23 @@ export class ProductService {
   getAll(): Observable<Product[]> {
     return this.http.get<ResponseModel<Product[]> | Product[]>(`${this.apiUrl}/GetAll`).pipe(
       map(res => unwrapResult(res) || [])
+    );
+  }
+
+  getPaged(
+    pageNumber: number = 1, 
+    pageSize: number = 12, 
+    search: string = '', 
+    categoryId?: number, 
+    branchId?: number
+  ): Observable<PagedResult<Product>> {
+    let params: any = { pageNumber, pageSize };
+    if (search && search.trim()) params.search = search.trim();
+    if (categoryId && categoryId > 0) params.categoryId = categoryId;
+    if (branchId && branchId > 0) params.branchId = branchId;
+
+    return this.http.get<ResponseModel<PagedResult<Product>> | PagedResult<Product>>(`${this.apiUrl}/GetPaged`, { params }).pipe(
+      map(res => unwrapResult(res))
     );
   }
 

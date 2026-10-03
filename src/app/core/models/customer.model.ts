@@ -5,6 +5,9 @@ export interface Customer {
   address: string;
   phoneNumber: string;
   location: string;
+  role?: string;
+  companyId?: number;
+  companyBranchId?: number;
   createdAt?: string;
 }
 

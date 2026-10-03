@@ -11,9 +11,12 @@ export interface CartItem {
 
 export interface Cart {
   id: number;
-  customerId: number;
+  customerId?: number;
+  userId?: number; // From backend
   createdAt: string;
   items?: CartItem[];
+  cartItems?: CartItem[]; // From backend
+  totalPrice?: number; // From backend
 }
 
 export interface CreateCartDto {

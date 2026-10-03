@@ -21,12 +21,12 @@ export class CartService {
 
   getByCustomerId(customerId: number): Observable<Cart> {
     this.isLoading.set(true);
-    return this.http.get<ResponseModel<Cart> | Cart>(`${this.apiUrl}/GetByCustomerIdCart?customerId=${customerId}`).pipe(
+    return this.http.get<ResponseModel<Cart> | Cart>(`${this.apiUrl}/GetByCustomerIdCart?UserId=${customerId}`).pipe(
       map(res => unwrapResult(res)),
       tap(cart => {
         this.isLoading.set(false);
         this.currentCart.set(cart);
-        const items = cart?.items || [];
+        const items = cart?.cartItems || cart?.items || [];
         this.cartItems.set(items);
         this.cartItemsCount.set(items.reduce((sum, item) => sum + (item.quantity || 1), 0));
       })
@@ -35,8 +35,8 @@ export class CartService {
 
   addItem(customerId: number, productId: number, quantity: number = 1): Observable<boolean> {
     return this.http.post<ResponseModel<boolean> | boolean>(
-      `${this.apiUrl}/AddItemtoCart?customerId=${customerId}&productId=${productId}&quantity=${quantity}`,
-      {}
+      `${this.apiUrl}/AddItemtoCart?UserId=${customerId}&productId=${productId}&quantity=${quantity}`,
+      null
     ).pipe(
       map(res => {
         const unwrapped = unwrapResult(res);
@@ -57,8 +57,8 @@ export class CartService {
     this.cartItemsCount.set(this.cartItems().reduce((sum, item) => sum + item.quantity, 0));
 
     return this.http.put<ResponseModel<boolean> | boolean>(
-      `${this.apiUrl}/Update?customerId=${customerId}&productId=${productId}&quantity=${quantity}`,
-      {}
+      `${this.apiUrl}/Update?UserId=${customerId}&productId=${productId}&quantity=${quantity}`,
+      null
     ).pipe(
       map(res => unwrapResult(res) === true)
     );
@@ -70,7 +70,7 @@ export class CartService {
     this.cartItemsCount.set(this.cartItems().reduce((sum, item) => sum + item.quantity, 0));
 
     return this.http.delete<ResponseModel<boolean> | boolean>(
-      `${this.apiUrl}/RemoveItemfromCart?customerId=${customerId}&productId=${productId}`
+      `${this.apiUrl}/RemoveItemfromCart?UserId=${customerId}&productId=${productId}`
     ).pipe(
       map(res => unwrapResult(res) === true)
     );

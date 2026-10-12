@@ -2,6 +2,7 @@ import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { NotificationService } from '../services/notification.service';
+import { environment } from '../../../environments/environment';
 
 export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const notificationService = inject(NotificationService);
@@ -11,7 +12,7 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
       let errorMessage = "Server bilan aloqada xatolik yuz berdi.";
 
       if (error.status === 0) {
-        errorMessage = "Backend serverga ulanib bo'lmadi (http://localhost:5099 ishlamayotgan bo'lishi mumkin).";
+        errorMessage = `Backend serverga ulanib bo'lmadi (${environment.apiUrl} ishlamayotgan bo'lishi mumkin).`;
       } else if (error.error) {
         if (typeof error.error === 'string') {
           errorMessage = error.error;

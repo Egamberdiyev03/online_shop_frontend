@@ -23,6 +23,8 @@ export interface OrderItem {
   unitPrice: number;
 }
 
+import { Payment } from './payment.model';
+
 export interface Order {
   id: number;
   customerId: number;
@@ -32,9 +34,41 @@ export interface Order {
   totalPrice: number;
   status: OrderStatus;
   orderItems: OrderItem[];
+  deliveryAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  payment?: Payment;
 }
 
 export interface CreateOrderDto {
   customerId: number;
   branchId: number;
+  deliveryAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
 }
+
+export type OrderPaymentFilter = 'all' | 'unpaid' | 'pending' | 'completed' | 'failed';
+
+export interface OrderFilter {
+  status?: OrderStatus | number | null;
+  search?: string | null;
+  branchId?: number | null;
+  companyId?: number | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  paymentStatus?: OrderPaymentFilter | null;
+  sortBy?: 'createdAt_desc' | 'createdAt_asc' | 'totalPrice_desc' | 'totalPrice_asc' | string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface OrderStatusCounts {
+  all: number;
+  pending: number;
+  confirmed: number;
+  shipped: number;
+  delivered: number;
+  cancelled: number;
+}
+

@@ -30,7 +30,7 @@ import { NotificationService } from '../../../core/services/notification.service
                 class="edit-email-btn"
                 (click)="isEmailEditable = !isEmailEditable"
               >
-                {{ isEmailEditable ? 'Saqlash' : 'O\'zgartirish' }}
+                {{ isEmailEditable ? 'Saqlash' : 'O‘zgartirish' }}
               </button>
             </div>
             <div class="input-wrapper">
@@ -81,7 +81,7 @@ import { NotificationService } from '../../../core/services/notification.service
           <button 
             type="submit" 
             class="btn btn-primary btn-block submit-btn" 
-            [disabled]="confirmForm.invalid || isLoading"
+            [disabled]="isLoading"
           >
             <span class="spinner" *ngIf="isLoading"></span>
             <span *ngIf="!isLoading">Tasdiqlash va Kirish &rarr;</span>
@@ -312,8 +312,11 @@ export class ConfirmEmailComponent implements OnInit {
   }
 
   onSubmit(): void {
-    if (this.confirmForm.invalid || this.isLoading) {
+    if (this.isLoading) return;
+
+    if (this.confirmForm.invalid) {
       this.confirmForm.markAllAsTouched();
+      this.notification.warning("Iltimos, tasdiqlash kodini to'liq kiriting!");
       return;
     }
 
@@ -331,8 +334,9 @@ export class ConfirmEmailComponent implements OnInit {
         // User session already stored in authService.confirmEmail
         this.router.navigate(['/products']);
       },
-      error: () => {
+      error: (err) => {
         this.isLoading = false;
+        this.notification.error(err?.error?.message || err?.message || "Tasdiqlash kodi noto'g'ri yoki muddati o'tgan.");
       }
     });
   }

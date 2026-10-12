@@ -37,6 +37,7 @@ import { OrderStatus, OrderStatusLabels } from '../../../core/models/order.model
 })
 export class StatusBadgeComponent {
   @Input() status: OrderStatus | number = OrderStatus.Pending;
+  @Input() showIcon = true;
 
   get config() {
     return OrderStatusLabels[this.status] || { label: "Noma'lum", color: '#64748b', bg: '#f1f5f9' };

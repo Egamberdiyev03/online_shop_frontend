@@ -70,46 +70,58 @@ function passwordMatchValidator(control: AbstractControl): ValidationErrors | nu
           <!-- Phone Number & Location (2 cols) -->
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="phoneNumber">Telefon raqam</label>
+              <label class="form-label" for="phoneNumber">Telefon raqam <span class="required">*</span></label>
               <div class="input-wrapper">
                 <span class="input-icon">📞</span>
                 <input
                   id="phoneNumber"
                   type="tel"
                   class="form-control"
+                  [class.is-invalid]="f['phoneNumber'].touched && f['phoneNumber'].invalid"
                   placeholder="+998901234567"
                   formControlName="phoneNumber"
                 />
               </div>
+              <div class="form-error" *ngIf="f['phoneNumber'].touched && f['phoneNumber'].invalid">
+                <span *ngIf="f['phoneNumber'].errors?.['required']">Telefon raqam kiritilishi shart.</span>
+              </div>
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="location">Shahar / Viloyat</label>
+              <label class="form-label" for="location">Shahar / Viloyat <span class="required">*</span></label>
               <div class="input-wrapper">
                 <span class="input-icon">📍</span>
                 <input
                   id="location"
                   type="text"
                   class="form-control"
+                  [class.is-invalid]="f['location'].touched && f['location'].invalid"
                   placeholder="Toshkent sh."
                   formControlName="location"
                 />
+              </div>
+              <div class="form-error" *ngIf="f['location'].touched && f['location'].invalid">
+                <span *ngIf="f['location'].errors?.['required']">Shahar yoki viloyat kiritilishi shart.</span>
               </div>
             </div>
           </div>
 
           <!-- Address -->
           <div class="form-group">
-            <label class="form-label" for="address">Yetkazib berish manzili</label>
+            <label class="form-label" for="address">Yetkazib berish manzili <span class="required">*</span></label>
             <div class="input-wrapper">
               <span class="input-icon">🏠</span>
               <input
                 id="address"
                 type="text"
                 class="form-control"
+                [class.is-invalid]="f['address'].touched && f['address'].invalid"
                 placeholder="Chilonzor tumani, 9-mavze, 12-uy"
                 formControlName="address"
               />
+            </div>
+            <div class="form-error" *ngIf="f['address'].touched && f['address'].invalid">
+              <span *ngIf="f['address'].errors?.['required']">Yetkazib berish manzili kiritilishi shart.</span>
             </div>
           </div>
 
@@ -164,7 +176,7 @@ function passwordMatchValidator(control: AbstractControl): ValidationErrors | nu
           <button 
             type="submit" 
             class="btn btn-primary btn-block submit-btn" 
-            [disabled]="registerForm.invalid || isLoading"
+            [disabled]="isLoading"
           >
             <span class="spinner" *ngIf="isLoading"></span>
             <span *ngIf="!isLoading">Ro'yxatdan o'tish</span>
@@ -336,9 +348,9 @@ export class RegisterComponent {
   registerForm: FormGroup = this.fb.group({
     name: ['', [Validators.required, Validators.minLength(3)]],
     email: ['', [Validators.required, Validators.email]],
-    phoneNumber: [''],
-    location: [''],
-    address: [''],
+    phoneNumber: ['', [Validators.required]],
+    location: ['', [Validators.required]],
+    address: ['', [Validators.required]],
     password: ['', [Validators.required, Validators.minLength(6)]],
     confirmPassword: ['', [Validators.required]]
   }, { validators: passwordMatchValidator });
@@ -348,8 +360,11 @@ export class RegisterComponent {
   }
 
   onSubmit(): void {
-    if (this.registerForm.invalid || this.isLoading) {
+    if (this.isLoading) return;
+
+    if (this.registerForm.invalid) {
       this.registerForm.markAllAsTouched();
+      this.notification.warning("Iltimos, barcha majburiy maydonlarni to'g'ri to'ldiring!");
       return;
     }
 
@@ -357,12 +372,12 @@ export class RegisterComponent {
     const formVal = this.registerForm.value;
 
     const dto = {
-      name: formVal.name.trim(),
-      email: formVal.email.trim().toLowerCase(),
+      name: (formVal.name || '').trim(),
+      email: (formVal.email || '').trim().toLowerCase(),
       password: formVal.password,
-      phoneNumber: formVal.phoneNumber?.trim() || undefined,
-      location: formVal.location?.trim() || undefined,
-      address: formVal.address?.trim() || undefined
+      phoneNumber: (formVal.phoneNumber || '').trim() || '+998901234567',
+      location: (formVal.location || '').trim() || 'Toshkent',
+      address: (formVal.address || '').trim() || "Ko'rsatilmagan"
     };
 
     this.authService.register(dto).subscribe({
@@ -373,8 +388,18 @@ export class RegisterComponent {
           queryParams: { email: dto.email }
         });
       },
-      error: () => {
+      error: (err) => {
         this.isLoading = false;
+        let msg = "Ro'yxatdan o'tishda xatolik yuz berdi.";
+        if (err?.error?.errors) {
+          const list = Object.values(err.error.errors).flat() as string[];
+          msg = list.join('. ');
+        } else if (err?.error?.message) {
+          msg = err.error.message;
+        } else if (err?.message) {
+          msg = err.message;
+        }
+        this.notification.error(msg);
       }
     });
   }

@@ -59,6 +59,7 @@
               }
             ],
             "styles": [
+              "node_modules/leaflet/dist/leaflet.css",
               "src/styles.css"
             ],
             "scripts": []
@@ -73,8 +74,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "10kB",
-                  "maximumError": "15kB"
+                  "maximumWarning": "20kB",
+                  "maximumError": "30kB"
                 }
               ],
               "outputHashing": "all"

@@ -27,13 +27,32 @@ export class AuthStateService {
   isSuperAdmin = computed(() => this.userRole() === 'SuperAdmin');
   isCompanyAdmin = computed(() => this.userRole() === 'CompanyAdmin');
   isBranchManager = computed(() => this.userRole() === 'BranchManager' || this.userRole() === 'BranchAdmin');
-  isCustomer = computed(() => this.userRole() === 'Customer');
+  isCustomer = computed(() => this.userRole() === 'Customer' || (!this.isAdminRole() && !this.isSuperAdmin()));
 
   // SuperAdmin, CompanyAdmin, BranchManager/BranchAdmin rollari
   isAdminRole = computed(() => {
     const role = this.userRole();
     return role === 'SuperAdmin' || role === 'CompanyAdmin' || role === 'BranchManager' || role === 'BranchAdmin';
   });
+
+  /**
+   * Analitikani ko'rish ruxsati tekshiruvi:
+   * Faqat SuperAdmin, CompanyAdmin va BranchManager ko'rishi mumkin.
+   * Mehmon (login qilmagan) va Customer ko'ra olmaydi.
+   */
+  canViewAnalytics = computed(() => {
+    if (!this.isAuthenticated()) return false;
+    const role = this.userRole();
+    return role === 'SuperAdmin' || role === 'CompanyAdmin' || role === 'BranchManager' || role === 'BranchAdmin';
+  });
+
+  /**
+   * Rol tekshirish yordamchi metodi
+   */
+  hasAnyRole(roles: string[]): boolean {
+    const current = this.userRole();
+    return current ? roles.includes(current) : false;
+  }
 
   // Savat va savatga qo'shish faqat oddiy mijozlar uchun (adminlar xarid qilmaydi)
   canUseCart = computed(() => {
@@ -45,6 +64,32 @@ export class AuthStateService {
 
   userCompanyId = computed(() => this.currentUser()?.companyId || null);
   userBranchId = computed(() => this.currentUser()?.companyBranchId || null);
+
+  /**
+   * Filial tafsilotini ko'rish ruxsati tekshiruvi:
+   * - SuperAdmin: barcha filiallarni ko'ra oladi
+   * - CompanyAdmin: faqat o'z kompaniyasining filiallarini ko'ra oladi
+   * - BranchManager: faqat o'z filialini ko'ra oladi
+   * - Customer / Mehmon: UMUMAN ko'ra olmaydi
+   */
+  canViewBranchDetails(branch: { id: number; companyId?: number } | null | undefined): boolean {
+    if (!branch || !this.isAuthenticated()) {
+      return false;
+    }
+    if (this.isSuperAdmin()) {
+      return true;
+    }
+    if (this.isCompanyAdmin()) {
+      const myCompanyId = this.userCompanyId();
+      return myCompanyId != null && Number(branch.companyId) === Number(myCompanyId);
+    }
+    if (this.isBranchManager()) {
+      const myBranchId = this.userBranchId();
+      return myBranchId != null && Number(branch.id) === Number(myBranchId);
+    }
+    // Customer yoki boshqa rollar uchun ruxsat yo'q
+    return false;
+  }
 
   constructor() {
     this.syncSessionOnStartup();
@@ -70,7 +115,7 @@ export class AuthStateService {
       const parsed = parseInt(saved, 10);
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
-    return 1;
+    return 0;
   }
 
   private getInitialAdminMode(): boolean {
@@ -93,11 +138,27 @@ export class AuthStateService {
           this.setCustomerId(userId);
         }
 
-        const isAdmin = decoded.role === 'SuperAdmin' || decoded.role === 'CompanyAdmin' || decoded.role === 'BranchManager';
-        if (isAdmin) {
-          this.isAdminMode.set(true);
-          localStorage.setItem(this.ADMIN_MODE_KEY, 'true');
+        // Token ichidagi claimlardan companyId va companyBranchId ni sinxronlash
+        const user = this.currentUser();
+        let compId = user?.companyId;
+        let branchId = user?.companyBranchId;
+        if (compId == null && decoded['companyId']) {
+          const parsed = parseInt(decoded['companyId'], 10);
+          if (!isNaN(parsed)) compId = parsed;
         }
+        if (branchId == null && decoded['companyBranchId']) {
+          const parsed = parseInt(decoded['companyBranchId'], 10);
+          if (!isNaN(parsed)) branchId = parsed;
+        }
+        if (user && (user.companyId !== compId || user.companyBranchId !== branchId)) {
+          const updated = { ...user, companyId: compId, companyBranchId: branchId };
+          this.currentUser.set(updated);
+          localStorage.setItem(this.USER_KEY, JSON.stringify(updated));
+        }
+
+        const isAdmin = decoded.role === 'SuperAdmin' || decoded.role === 'CompanyAdmin' || decoded.role === 'BranchManager' || decoded.role === 'BranchAdmin';
+        this.isAdminMode.set(isAdmin);
+        localStorage.setItem(this.ADMIN_MODE_KEY, String(isAdmin));
       }
     }
   }
@@ -136,15 +197,28 @@ export class AuthStateService {
     if (!auth || !auth.token) return;
 
     let userId = auth.userId;
+    let companyId = auth.companyId;
+    let companyBranchId = auth.companyBranchId;
+
     const decoded = this.decodeToken(auth.token);
     if (decoded) {
       const extractedId = this.extractUserId(decoded);
       if (extractedId) userId = extractedId;
+      if (companyId == null && decoded['companyId']) {
+        const parsed = parseInt(decoded['companyId'], 10);
+        if (!isNaN(parsed)) companyId = parsed;
+      }
+      if (companyBranchId == null && decoded['companyBranchId']) {
+        const parsed = parseInt(decoded['companyBranchId'], 10);
+        if (!isNaN(parsed)) companyBranchId = parsed;
+      }
     }
 
     const completeAuth: AuthResponseDto = {
       ...auth,
-      userId: userId || auth.userId
+      userId: userId || auth.userId,
+      companyId: companyId != null ? companyId : null,
+      companyBranchId: companyBranchId != null ? companyBranchId : null
     };
 
     this.token.set(auth.token);
@@ -157,7 +231,7 @@ export class AuthStateService {
       this.setCustomerId(userId);
     }
 
-    const isAdmin = auth.role === 'SuperAdmin' || auth.role === 'CompanyAdmin';
+    const isAdmin = auth.role === 'SuperAdmin' || auth.role === 'CompanyAdmin' || auth.role === 'BranchManager';
     this.isAdminMode.set(isAdmin);
     localStorage.setItem(this.ADMIN_MODE_KEY, String(isAdmin));
   }
@@ -172,7 +246,7 @@ export class AuthStateService {
     localStorage.removeItem(this.CUSTOMER_ID_KEY);
     localStorage.removeItem(this.ADMIN_MODE_KEY);
 
-    this.currentCustomerId.set(1);
+    this.currentCustomerId.set(0);
     this.isAdminMode.set(false);
   }
 

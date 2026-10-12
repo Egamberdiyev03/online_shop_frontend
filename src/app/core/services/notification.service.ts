@@ -15,6 +15,11 @@ export class NotificationService {
   public toasts = this.toastsSignal.asReadonly();
 
   show(type: 'success' | 'error' | 'info' | 'warning', message: string, title?: string): void {
+    // Prevent duplicate toast messages from spamming the UI
+    if (this.toastsSignal().some(t => t.message === message)) {
+      return;
+    }
+
     const id = Math.random().toString(36).substring(2, 9);
     const toast: ToastNotification = { id, type, message, title };
 

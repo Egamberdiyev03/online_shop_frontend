@@ -17,6 +17,16 @@ export interface ConfirmEmailDto {
   code: string;
 }
 
+export interface ForgotPasswordDto {
+  email: string;
+}
+
+export interface ResetPasswordDto {
+  email: string;
+  code: string;
+  newPassword: string;
+}
+
 export interface AuthResponseDto {
   token: string;
   email: string;

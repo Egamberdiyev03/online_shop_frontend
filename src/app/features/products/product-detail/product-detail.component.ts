@@ -61,10 +61,10 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
             <div class="meta-row">
               <span class="stock-status" [class.in-stock]="product.quantity > 0" [class.out]="product.quantity <= 0">
-                &#9679; {{ product.quantity > 0 ? ('Omborda mavjud: ' + product.quantity + ' dona') : 'Omborda tugagan' }}
+                ● {{ product.quantity > 0 ? ('Omborda mavjud: ' + product.quantity + ' dona') : 'Omborda tugagan' }}
               </span>
               <span class="branch-pill" *ngIf="product.companyBranchId">
-                &#127970; Filial: #{{ product.companyBranchId }}
+                📍 Filial: #{{ product.companyBranchId }}
               </span>
             </div>
 
@@ -100,14 +100,14 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                 [disabled]="product.quantity <= 0 || isAddingToCart"
                 (click)="addToCart()"
               >
-                <span>&#128722;</span>
+                <span>🛒</span>
                 <span>{{ addToCartBtnText }}</span>
               </button>
             </div>
 
             <!-- Admin bo'lsa xabar -->
             <div class="admin-notice-box" *ngIf="!authState.canUseCart()">
-              <span class="admin-notice-badge">&#128737; Boshqaruvchi Rejimi</span>
+              <span class="admin-notice-badge">🛡️ Boshqaruvchi Rejimi</span>
               <p>Siz admin sifatida kirdingiz. Savat va xarid qilish faqat xaridorlar (mijozlar) uchun mo'ljallangan.</p>
             </div>
           </div>
@@ -175,7 +175,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
           <div class="comments-list">
             <app-empty-state 
               *ngIf="comments.length === 0"
-              icon="&#128172;"
+              icon="💬"
               title="Hali sharhlar yo'q"
               description="Ushbu mahsulotga birinchi bo'lib sharh qoldiring!"
             ></app-empty-state>

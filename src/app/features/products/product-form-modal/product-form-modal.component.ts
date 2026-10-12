@@ -1,4 +1,4 @@
-﻿import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Product, CreateProductDto, UpdateProductDto } from '../../../core/models/product.model';
@@ -216,7 +216,7 @@ export class ProductFormModalComponent implements OnInit {
 
     private loadDropdownData(): void {
     this.categoryService.getAll().subscribe({
-      next: (cats) => (this.categories = cats),
+      next: (cats) => (this.categories = (cats || []).filter(c => c.isActive)),
       error: () => {}
     });
 

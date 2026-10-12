@@ -5,6 +5,8 @@ export interface CompanyBranch {
   address: string;
   location: string;
   companyId: number;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface CreateCompanyBranchDto {
@@ -13,6 +15,8 @@ export interface CreateCompanyBranchDto {
   address: string;
   companyId: number;
   location: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface UpdateCompanyBranchDto {
@@ -22,4 +26,6 @@ export interface UpdateCompanyBranchDto {
   address: string;
   location: string;
   companyId: number;
+  latitude?: number;
+  longitude?: number;
 }

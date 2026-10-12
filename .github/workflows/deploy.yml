@@ -2,7 +2,7 @@ name: Deploy Frontend
 
 on:
   push:
-    branches: [main]      # git branch ko'rsatgan nomga moslang
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 15 -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-           - name: Serverga yuborish
+      - name: Serverga yuborish
         run: |
           OUT=$(dirname "$(find dist -name index.html | head -n 1)")
           echo "Build papkasi: $OUT"

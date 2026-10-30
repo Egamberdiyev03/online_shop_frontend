@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   Payment,
   PaymentStatus,
+  parsePaymentStatus,
   CreatePaymentDto,
   RejectPaymentDto,
   PaymentListItem,
@@ -48,17 +49,29 @@ export class PaymentService {
     );
   }
 
+  public normalizePayment(p: any): Payment {
+    if (!p) return p;
+    return {
+      ...p,
+      status: parsePaymentStatus(p.status)
+    };
+  }
+
+  public normalizePayments(payments: any[]): Payment[] {
+    return (payments || []).map(p => this.normalizePayment(p));
+  }
+
   // 2. To'lov yaratish (mijoz chek yuboradi)
   createPayment(dto: CreatePaymentDto): Observable<Payment> {
     return this.http.post<ResponseModel<Payment> | Payment>(`${this.apiUrl}/create`, dto).pipe(
-      map(res => unwrapResult(res))
+      map(res => this.normalizePayment(unwrapResult(res)))
     );
   }
 
   // 3. Buyurtma bo'yicha to'lov ma'lumotini olish
   getPaymentByOrderId(orderId: number): Observable<Payment | null> {
     return this.http.get<ResponseModel<Payment> | Payment>(`${this.apiUrl}/get-by-order/${orderId}`).pipe(
-      map(res => unwrapResult(res) || null),
+      map(res => this.normalizePayment(unwrapResult(res)) || null),
       catchError(() => of(null))
     );
   }
@@ -78,7 +91,7 @@ export class PaymentService {
     }
 
     return this.http.get<ResponseModel<Payment[]> | Payment[]>(url).pipe(
-      map(res => unwrapResult(res) || []),
+      map(res => this.normalizePayments(unwrapResult(res))),
       catchError(() => of([]))
     );
   }
@@ -89,7 +102,7 @@ export class PaymentService {
       `${this.apiUrl}/confirm/${paymentId}?adminId=${adminId}`,
       null
     ).pipe(
-      map(res => unwrapResult(res))
+      map(res => this.normalizePayment(unwrapResult(res)))
     );
   }
 
@@ -99,7 +112,7 @@ export class PaymentService {
       `${this.apiUrl}/reject?adminId=${adminId}`,
       dto
     ).pipe(
-      map(res => unwrapResult(res))
+      map(res => this.normalizePayment(unwrapResult(res)))
     );
   }
 

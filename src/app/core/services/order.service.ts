@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Order, OrderStatus, OrderFilter, OrderStatusCounts } from '../models/order.model';
+import { Order, OrderStatus, OrderFilter, OrderStatusCounts, parseOrderStatus } from '../models/order.model';
 import { PagedResult } from '../models/payment.model';
 import { ResponseModel, unwrapResult } from '../models/response.model';
 
@@ -52,6 +52,7 @@ export class OrderService {
     if (!o) return o;
     return {
       ...o,
+      status: parseOrderStatus(o.status),
       customerId: o.customerId || o.userId || 0,
       userId: o.userId || o.customerId || 0
     };
@@ -75,7 +76,7 @@ export class OrderService {
   }
 
   getByCustomerId(customerId: number): Observable<Order[]> {
-    return this.http.get<ResponseModel<Order[]> | Order[]>(`${this.apiUrl}/GetOrderByCustomerId?customerId=${customerId}`).pipe(
+    return this.http.get<ResponseModel<Order[]> | Order[]>(`${this.apiUrl}/GetOrderByUserId?customerId=${customerId}`).pipe(
       map(res => this.normalizeOrders(unwrapResult(res)))
     );
   }

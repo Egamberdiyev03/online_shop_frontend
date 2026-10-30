@@ -2,10 +2,10 @@ import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
-import { Order, OrderStatus, OrderFilter, OrderStatusCounts, OrderPaymentFilter } from '../../../core/models/order.model';
+import { Order, OrderStatus, OrderFilter, OrderStatusCounts, OrderPaymentFilter, parseOrderStatus } from '../../../core/models/order.model';
 import { CompanyBranch } from '../../../core/models/company-branch.model';
 import { Company } from '../../../core/models/company.model';
-import { Payment, PaymentStatus, PaymentStatusLabels, PagedResult } from '../../../core/models/payment.model';
+import { Payment, PaymentStatus, PaymentStatusLabels, PagedResult, parsePaymentStatus } from '../../../core/models/payment.model';
 import { Customer } from '../../../core/models/customer.model';
 import { OrderService } from '../../../core/services/order.service';
 import { CompanyService } from '../../../core/services/company.service';
@@ -206,7 +206,7 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
                 </span>
                 <span 
                   class="rejection-note" 
-                  *ngIf="orderPayments.get(order.id)?.status === PaymentStatus.Failed && orderPayments.get(order.id)?.rejectionReason"
+                  *ngIf="isPaymentFailed(orderPayments.get(order.id)) && orderPayments.get(order.id)?.rejectionReason"
                 >
                   Sabab: {{ orderPayments.get(order.id)?.rejectionReason }}
                 </span>
@@ -269,12 +269,12 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
                   [ngModel]="order.status" 
                   (ngModelChange)="updateStatus(order, $event)"
                   class="form-control status-select"
+                  [disabled]="isOrderFinal(order.status)"
                 >
-                  <option [ngValue]="OrderStatus.Pending">Kutilmoqda</option>
-                  <option [ngValue]="OrderStatus.Confirmed">Tasdiqlangan</option>
-                  <option [ngValue]="OrderStatus.Shipped">Jo'natildi</option>
-                  <option [ngValue]="OrderStatus.Delivered">Yetkazildi</option>
-                  <option [ngValue]="OrderStatus.Cancelled">Bekor qilindi</option>
+                  <option [ngValue]="OrderStatus.Pending" [disabled]="order.status !== OrderStatus.Pending">Kutilmoqda</option>
+                  <option [ngValue]="OrderStatus.Confirmed" [disabled]="!canChangeToConfirmed(order)">{{ getConfirmedOptionLabel(order) }}</option>
+                  <option [ngValue]="OrderStatus.Shipped" [disabled]="!canChangeToShipped(order)">{{ getShippedOptionLabel(order) }}</option>
+                  <option [ngValue]="OrderStatus.Delivered" [disabled]="!canChangeToDelivered(order)">{{ getDeliveredOptionLabel(order) }}</option>
                 </select>
               </div>
             </div>
@@ -495,7 +495,7 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
             </div>
 
             <!-- Case 2: No Receipt yet but Order Pending (Manual Cash/Terminal confirmation at branch) -->
-            <div class="manual-payment-box" *ngIf="!adminReviewPayment && adminReviewOrder.status === OrderStatus.Pending">
+            <div class="manual-payment-box" *ngIf="!adminReviewPayment && isOrderPending(adminReviewOrder)">
               <div class="manual-pay-title">
                 <span>💵 Filialda to‘lovni qabul qilish</span>
               </div>
@@ -547,7 +547,7 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
             </button>
 
             <!-- Case A: Payment Pending -> Reject or Approve -->
-            <ng-container *ngIf="adminReviewPayment && adminReviewPayment.status === PaymentStatus.Pending">
+            <ng-container *ngIf="adminReviewPayment && isPaymentPending(adminReviewPayment)">
               <button
                 *ngIf="!showRejectReasonInput"
                 type="button"
@@ -588,7 +588,7 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
             </ng-container>
 
             <!-- Case B: No payment record yet -> Direct cash confirmation -->
-            <ng-container *ngIf="!adminReviewPayment && adminReviewOrder?.status === OrderStatus.Pending">
+            <ng-container *ngIf="!adminReviewPayment && isOrderPending(adminReviewOrder)">
               <button
                 type="button"
                 class="btn btn-success btn-sm"
@@ -1496,6 +1496,101 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       background: #111827;
       border-bottom-color: #1f2937;
     }
+
+    /* Dark Mode - Admin Review & Modals */
+    :host-context(body.dark-theme) .admin-review-summary {
+      background: #0f172a !important;
+      border-color: #22304d !important;
+    }
+    :host-context(body.dark-theme) .summary-line {
+      color: #94a3b8 !important;
+    }
+    :host-context(body.dark-theme) .summary-line strong {
+      color: #f8fafc !important;
+    }
+    :host-context(body.dark-theme) .note-text {
+      color: #cbd5e1 !important;
+    }
+    :host-context(body.dark-theme) .manual-payment-box {
+      background: #064e3b22 !important;
+      border-color: #05966955 !important;
+    }
+    :host-context(body.dark-theme) .manual-pay-title {
+      color: #34d399 !important;
+    }
+    :host-context(body.dark-theme) .manual-pay-desc {
+      color: #a7f3d0 !important;
+    }
+    :host-context(body.dark-theme) .radio-option {
+      color: #6ee7b7 !important;
+    }
+    :host-context(body.dark-theme) .form-sub-label {
+      color: #cbd5e1 !important;
+    }
+    :host-context(body.dark-theme) .receipt-preview-card {
+      border-color: #334155 !important;
+    }
+    :host-context(body.dark-theme) .pay-summary-strip {
+      background: #0f172a !important;
+      border-color: #22304d !important;
+    }
+    :host-context(body.dark-theme) .guide-side {
+      background: #1e1b4b !important;
+      color: #a5b4fc !important;
+      border-left-color: #6366f1 !important;
+    }
+    :host-context(body.dark-theme) .file-drop-area-compact {
+      background: #0f172a !important;
+      border-color: #334155 !important;
+    }
+    :host-context(body.dark-theme) .file-drop-area-compact:hover {
+      background: #1e293b !important;
+      border-color: #6366f1 !important;
+    }
+    :host-context(body.dark-theme) .file-name {
+      color: #f8fafc !important;
+    }
+    :host-context(body.dark-theme) .drop-empty {
+      color: #94a3b8 !important;
+    }
+    .btn-warning {
+      background: #f59e0b;
+      color: #ffffff;
+      border: 1px solid #d97706;
+      box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.25);
+    }
+    .btn-warning:hover {
+      background: #d97706;
+      color: #ffffff;
+    }
+    .btn-success {
+      background: #10b981;
+      color: #ffffff;
+      border: 1px solid #059669;
+      box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.25);
+    }
+    .btn-success:hover {
+      background: #059669;
+      color: #ffffff;
+    }
+    :host-context(body.dark-theme) .btn-warning {
+      background: #d97706 !important;
+      color: #ffffff !important;
+      border-color: #f59e0b !important;
+      box-shadow: 0 4px 10px rgba(217, 119, 6, 0.35) !important;
+    }
+    :host-context(body.dark-theme) .btn-warning:hover {
+      background: #b45309 !important;
+    }
+    :host-context(body.dark-theme) .btn-success {
+      background: #10b981 !important;
+      color: #ffffff !important;
+      border-color: #059669 !important;
+      box-shadow: 0 4px 10px rgba(16, 185, 129, 0.35) !important;
+    }
+    :host-context(body.dark-theme) .btn-success:hover {
+      background: #059669 !important;
+    }
   `]
 })
 export class OrdersListComponent implements OnInit {
@@ -1817,6 +1912,14 @@ export class OrdersListComponent implements OnInit {
 
     if (this.viewMode === 'my') {
       const customerId = this.authState.currentCustomerId();
+      if (!customerId || customerId <= 0) {
+        this.isLoading = false;
+        this.allOrders = [];
+        this.orders = [];
+        this.filteredOrders = [];
+        this.paginatedOrders = [];
+        return;
+      }
       this.orderService.getByCustomerId(customerId).subscribe({
         next: (orders) => {
           this.allOrders = orders || [];
@@ -1969,12 +2072,7 @@ export class OrdersListComponent implements OnInit {
   loadPaymentsForOrders(): void {
     if (!this.orders || this.orders.length === 0) return;
 
-    // Faqat SuperAdmin va CompanyAdmin Payment/get-all endpointiga ruxsatga ega.
-    // Backend PaymentController da 'BranchAdmin' deb yozilganligi tufayli BranchManager rolida 403 beradi.
-    // Shuning uchun BranchManager va Customer to'lovlari xavfsiz getPaymentByOrderId orqali olinadi.
-    const canCallGetAll = (this.authState.isSuperAdmin() || this.authState.isCompanyAdmin()) && !this.authState.isBranchManager();
-
-    if (canCallGetAll && this.viewMode === 'all') {
+    if (this.authState.isAdminRole() && this.viewMode === 'all') {
       const branchId = this.orderFilter.branchId || undefined;
       this.paymentService.getAllPayments(undefined, branchId).subscribe({
         next: (payments) => {
@@ -2004,8 +2102,28 @@ export class OrdersListComponent implements OnInit {
     return this.orderPayments.get(orderId);
   }
 
-  getPaymentBadge(status: PaymentStatus): { label: string; color: string; bg: string } {
-    return PaymentStatusLabels[status] || { label: 'Noma\'lum', color: '#6b7280', bg: '#f3f4f6' };
+  isPaymentPending(payment?: Payment | null): boolean {
+    if (!payment) return false;
+    return parsePaymentStatus(payment.status) === PaymentStatus.Pending;
+  }
+
+  isPaymentCompleted(payment?: Payment | null): boolean {
+    if (!payment) return false;
+    return parsePaymentStatus(payment.status) === PaymentStatus.Completed;
+  }
+
+  isPaymentFailed(payment?: Payment | null): boolean {
+    if (!payment) return false;
+    return parsePaymentStatus(payment.status) === PaymentStatus.Failed;
+  }
+
+  isOrderPending(order?: Order | null): boolean {
+    if (!order) return false;
+    return parseOrderStatus(order.status) === OrderStatus.Pending;
+  }
+
+  getPaymentBadge(status: any): { label: string; color: string; bg: string } {
+    return PaymentStatusLabels[status] || PaymentStatusLabels[parsePaymentStatus(status)] || { label: 'Noma\'lum', color: '#6b7280', bg: '#f3f4f6' };
   }
 
   getOrderPaymentBadge(order: Order): { label: string; color: string; bg: string } {
@@ -2057,13 +2175,14 @@ export class OrdersListComponent implements OnInit {
     if (!payment) {
       return '💵 To‘lovni qabul qilish';
     }
-    if (payment.status === PaymentStatus.Pending) {
+    const pStatus = parsePaymentStatus(payment.status);
+    if (pStatus === PaymentStatus.Pending) {
       return '⏳ To‘lovni tekshirish';
     }
-    if (payment.status === PaymentStatus.Completed) {
+    if (pStatus === PaymentStatus.Completed) {
       return '✅ To‘lov tasdiqlangan';
     }
-    if (payment.status === PaymentStatus.Failed) {
+    if (pStatus === PaymentStatus.Failed) {
       return '⚠️ To‘lov rad etilgan';
     }
     return '💳 To‘lov ma’lumotlari';
@@ -2074,13 +2193,14 @@ export class OrdersListComponent implements OnInit {
     if (!payment) {
       return 'btn-success';
     }
-    if (payment.status === PaymentStatus.Pending) {
+    const pStatus = parsePaymentStatus(payment.status);
+    if (pStatus === PaymentStatus.Pending) {
       return 'btn-warning';
     }
-    if (payment.status === PaymentStatus.Completed) {
+    if (pStatus === PaymentStatus.Completed) {
       return 'btn-secondary';
     }
-    if (payment.status === PaymentStatus.Failed) {
+    if (pStatus === PaymentStatus.Failed) {
       return 'btn-danger';
     }
     return 'btn-secondary';
@@ -2272,6 +2392,17 @@ export class OrdersListComponent implements OnInit {
     this.showRejectReasonInput = false;
     this.rejectReasonHasError = false;
     this.showAdminPaymentModal = true;
+
+    if (!this.adminReviewPayment) {
+      this.paymentService.getPaymentByOrderId(order.id).subscribe({
+        next: (p) => {
+          if (p) {
+            this.adminReviewPayment = p;
+            this.orderPayments.set(order.id, p);
+          }
+        }
+      });
+    }
 
     const cId = order.customerId || (order as any).userId;
     if (cId && !this.customersMap.has(cId)) {
@@ -2476,13 +2607,102 @@ export class OrdersListComponent implements OnInit {
     });
   }
 
-  updateStatus(order: Order, newStatus: OrderStatus): void {
-    this.orderService.updateStatus(order.id, newStatus).subscribe({
+  isOrderFinal(status: any): boolean {
+    const s = parseOrderStatus(status);
+    return s === OrderStatus.Delivered || s === OrderStatus.Cancelled;
+  }
+
+  canChangeToConfirmed(order: Order): boolean {
+    const s = parseOrderStatus(order.status);
+    if (s === OrderStatus.Confirmed) return true;
+    if (s !== OrderStatus.Pending) return false;
+    const payment = this.getPayment(order.id);
+    return !!payment && this.isPaymentCompleted(payment);
+  }
+
+  getConfirmedOptionLabel(order: Order): string {
+    const s = parseOrderStatus(order.status);
+    if (s === OrderStatus.Pending) {
+      const payment = this.getPayment(order.id);
+      if (!payment || !this.isPaymentCompleted(payment)) {
+        return "Tasdiqlangan (To‘lov kutilmoqda)";
+      }
+    }
+    return 'Tasdiqlangan';
+  }
+
+  canChangeToShipped(order: Order): boolean {
+    const s = parseOrderStatus(order.status);
+    if (s === OrderStatus.Shipped) return true;
+    if (s !== OrderStatus.Confirmed) return false;
+    const payment = this.getPayment(order.id);
+    return !!payment && this.isPaymentCompleted(payment);
+  }
+
+  getShippedOptionLabel(order: Order): string {
+    const s = parseOrderStatus(order.status);
+    if (s === OrderStatus.Pending) {
+      return "Jo‘natildi (Avval to‘lov kerak)";
+    }
+    return "Jo‘natildi";
+  }
+
+  canChangeToDelivered(order: Order): boolean {
+    const s = parseOrderStatus(order.status);
+    if (s === OrderStatus.Delivered) return true;
+    if (s !== OrderStatus.Shipped && s !== OrderStatus.Confirmed) return false;
+    const payment = this.getPayment(order.id);
+    return !!payment && this.isPaymentCompleted(payment);
+  }
+
+  getDeliveredOptionLabel(order: Order): string {
+    const s = parseOrderStatus(order.status);
+    if (s === OrderStatus.Pending) {
+      return "Yetkazildi (Avval to‘lov kerak)";
+    }
+    return 'Yetkazildi';
+  }
+
+  updateStatus(order: Order, newStatus: any): void {
+    const parsedNew = parseOrderStatus(newStatus);
+    const parsedCurrent = parseOrderStatus(order.status);
+
+    if (parsedNew === parsedCurrent) return;
+
+    if (this.isOrderFinal(parsedCurrent)) {
+      this.notification.warning("Ushbu buyurtma yakunlangan yoki bekor qilingan, statusini o'zgartirib bo'lmaydi.");
+      return;
+    }
+
+    if (parsedNew === OrderStatus.Shipped || parsedNew === OrderStatus.Delivered) {
+      const payment = this.getPayment(order.id);
+      if (!payment || !this.isPaymentCompleted(payment)) {
+        this.notification.warning("To‘lov hali tasdiqlanmagan! Avval 'To‘lovni tekshirish' orqali to‘lovni tasdiqlang.");
+        return;
+      }
+      if (parsedCurrent === OrderStatus.Pending) {
+        this.notification.warning("Buyurtma hali tasdiqlanmagan! Avval to‘lovni tasdiqlang.");
+        return;
+      }
+    }
+
+    if (parsedNew === OrderStatus.Confirmed) {
+      const payment = this.getPayment(order.id);
+      if (payment && !this.isPaymentCompleted(payment)) {
+        this.notification.info("Iltimos, to‘lovni 'To‘lovni tekshirish' tugmasi orqali tekshirib tasdiqlang.");
+        this.openAdminPaymentModal(order);
+        return;
+      }
+    }
+
+    this.orderService.updateStatus(order.id, parsedNew).subscribe({
       next: () => {
-        order.status = newStatus;
+        order.status = parsedNew;
         this.notification.success(`#${order.id}-buyurtma holati yangilandi.`);
       },
-      error: () => {}
+      error: (err) => {
+        this.notification.error(err?.error?.message || 'Statusni yangilashda xatolik yuz berdi.');
+      }
     });
   }
 }

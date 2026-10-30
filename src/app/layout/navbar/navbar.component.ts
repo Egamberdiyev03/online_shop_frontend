@@ -6,11 +6,12 @@ import { CartService } from '../../core/services/cart.service';
 import { AuthStateService } from '../../core/services/auth-state.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ThemeService } from '../../core/services/theme.service';
+import { NotificationBellComponent } from '../../shared/components/notification-bell/notification-bell.component';
 
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule],
+  imports: [CommonModule, RouterModule, FormsModule, NotificationBellComponent],
   template: `
     <header class="navbar-wrapper">
       <!-- Top Announcement & Auth Bar (Matching 'OnlineShop — Admin rejimi.md') -->
@@ -145,6 +146,9 @@ import { ThemeService } from '../../core/services/theme.service';
 
           <!-- Right Action: Cart & Theme Toggle -->
           <div class="nav-actions">
+            <!-- Bildirishnomalar faqat tizimga kirgan foydalanuvchilar uchun -->
+            <app-notification-bell *ngIf="authState.isAuthenticated()"></app-notification-bell>
+
             <!-- Kun / Tun (Theme toggle) button -->
             <button 
               type="button"

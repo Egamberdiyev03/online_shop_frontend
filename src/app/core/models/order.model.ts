@@ -6,12 +6,40 @@ export enum OrderStatus {
   Cancelled = 4
 }
 
-export const OrderStatusLabels: Record<OrderStatus | number, { label: string; color: string; bg: string }> = {
+export function parseOrderStatus(status: any): OrderStatus {
+  if (typeof status === 'number') return status;
+  if (typeof status === 'string') {
+    switch (status.trim().toLowerCase()) {
+      case 'pending': return OrderStatus.Pending;
+      case 'confirmed': return OrderStatus.Confirmed;
+      case 'shipped': return OrderStatus.Shipped;
+      case 'delivered': return OrderStatus.Delivered;
+      case 'cancelled': return OrderStatus.Cancelled;
+      default:
+        const parsed = parseInt(status, 10);
+        return isNaN(parsed) ? OrderStatus.Pending : parsed;
+    }
+  }
+  return OrderStatus.Pending;
+}
+
+export const OrderStatusLabels: Record<any, { label: string; color: string; bg: string }> = {
   [OrderStatus.Pending]: { label: 'Kutilmoqda', color: '#b45309', bg: '#fef3c7' },
   [OrderStatus.Confirmed]: { label: 'Tasdiqlangan', color: '#1d4ed8', bg: '#dbeafe' },
   [OrderStatus.Shipped]: { label: "Jo'natildi", color: '#6d28d9', bg: '#ede9fe' },
   [OrderStatus.Delivered]: { label: 'Yetkazildi', color: '#15803d', bg: '#dcfce7' },
   [OrderStatus.Cancelled]: { label: 'Bekor qilindi', color: '#b91c1c', bg: '#fee2e2' },
+
+  'Pending': { label: 'Kutilmoqda', color: '#b45309', bg: '#fef3c7' },
+  'pending': { label: 'Kutilmoqda', color: '#b45309', bg: '#fef3c7' },
+  'Confirmed': { label: 'Tasdiqlangan', color: '#1d4ed8', bg: '#dbeafe' },
+  'confirmed': { label: 'Tasdiqlangan', color: '#1d4ed8', bg: '#dbeafe' },
+  'Shipped': { label: "Jo'natildi", color: '#6d28d9', bg: '#ede9fe' },
+  'shipped': { label: "Jo'natildi", color: '#6d28d9', bg: '#ede9fe' },
+  'Delivered': { label: 'Yetkazildi', color: '#15803d', bg: '#dcfce7' },
+  'delivered': { label: 'Yetkazildi', color: '#15803d', bg: '#dcfce7' },
+  'Cancelled': { label: 'Bekor qilindi', color: '#b91c1c', bg: '#fee2e2' },
+  'cancelled': { label: 'Bekor qilindi', color: '#b91c1c', bg: '#fee2e2' },
 };
 
 export interface OrderItem {
@@ -71,4 +99,3 @@ export interface OrderStatusCounts {
   delivered: number;
   cancelled: number;
 }
-

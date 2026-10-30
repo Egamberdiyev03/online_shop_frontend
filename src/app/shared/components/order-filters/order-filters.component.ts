@@ -543,7 +543,7 @@ export class OrderFiltersComponent implements OnInit, OnDestroy {
   @Output() filterChange = new EventEmitter<OrderFilter>();
   @Output() reset = new EventEmitter<void>();
 
-  isCollapsed = false;
+  @Input() isCollapsed = true;
   private searchSubject = new Subject<string>();
   private searchSub?: Subscription;
 

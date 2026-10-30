@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { OrderStatus } from '../../../../core/models/order.model';
+import { OrderStatus, parseOrderStatus } from '../../../../core/models/order.model';
 
 @Component({
   selector: 'app-order-stepper',
@@ -207,11 +207,11 @@ export class OrderStepperComponent {
   ];
 
   get isCancelled(): boolean {
-    return Number(this.currentStatus) === OrderStatus.Cancelled;
+    return parseOrderStatus(this.currentStatus) === OrderStatus.Cancelled;
   }
 
   private weight(status: OrderStatus | number): number {
-    switch (Number(status)) {
+    switch (parseOrderStatus(status)) {
       case OrderStatus.Pending: return 1;
       case OrderStatus.Confirmed: return 2;
       case OrderStatus.Shipped: return 3;
@@ -227,7 +227,7 @@ export class OrderStepperComponent {
 
   isActive(stepStatus: OrderStatus): boolean {
     if (this.isCancelled) return false;
-    return Number(this.currentStatus) === stepStatus;
+    return parseOrderStatus(this.currentStatus) === stepStatus;
   }
 
   isUpcoming(stepStatus: OrderStatus): boolean {

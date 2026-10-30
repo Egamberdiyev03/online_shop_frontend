@@ -6,12 +6,40 @@ export enum PaymentStatus {
   Cancelled = 4    // Bekor qilingan
 }
 
-export const PaymentStatusLabels: Record<PaymentStatus | number, { label: string; color: string; bg: string; borderColor: string }> = {
+export function parsePaymentStatus(status: any): PaymentStatus {
+  if (typeof status === 'number') return status;
+  if (typeof status === 'string') {
+    switch (status.trim().toLowerCase()) {
+      case 'pending': return PaymentStatus.Pending;
+      case 'completed': return PaymentStatus.Completed;
+      case 'failed': return PaymentStatus.Failed;
+      case 'refunded': return PaymentStatus.Refunded;
+      case 'cancelled': return PaymentStatus.Cancelled;
+      default:
+        const parsed = parseInt(status, 10);
+        return isNaN(parsed) ? PaymentStatus.Pending : parsed;
+    }
+  }
+  return PaymentStatus.Pending;
+}
+
+export const PaymentStatusLabels: Record<any, { label: string; color: string; bg: string; borderColor: string }> = {
   [PaymentStatus.Pending]: { label: 'To‘lov kutilmoqda', color: '#b45309', bg: '#fef3c7', borderColor: '#fde68a' },
   [PaymentStatus.Completed]: { label: 'Tasdiqlangan', color: '#15803d', bg: '#dcfce7', borderColor: '#bbf7d0' },
   [PaymentStatus.Failed]: { label: 'To‘lov rad etildi', color: '#b91c1c', bg: '#fee2e2', borderColor: '#fecaca' },
   [PaymentStatus.Refunded]: { label: 'Qaytarildi', color: '#4b5563', bg: '#f3f4f6', borderColor: '#e5e7eb' },
   [PaymentStatus.Cancelled]: { label: 'Bekor qilindi', color: '#6b7280', bg: '#e5e7eb', borderColor: '#d1d5db' },
+
+  'Pending': { label: 'To‘lov kutilmoqda', color: '#b45309', bg: '#fef3c7', borderColor: '#fde68a' },
+  'pending': { label: 'To‘lov kutilmoqda', color: '#b45309', bg: '#fef3c7', borderColor: '#fde68a' },
+  'Completed': { label: 'Tasdiqlangan', color: '#15803d', bg: '#dcfce7', borderColor: '#bbf7d0' },
+  'completed': { label: 'Tasdiqlangan', color: '#15803d', bg: '#dcfce7', borderColor: '#bbf7d0' },
+  'Failed': { label: 'To‘lov rad etildi', color: '#b91c1c', bg: '#fee2e2', borderColor: '#fecaca' },
+  'failed': { label: 'To‘lov rad etildi', color: '#b91c1c', bg: '#fee2e2', borderColor: '#fecaca' },
+  'Refunded': { label: 'Qaytarildi', color: '#4b5563', bg: '#f3f4f6', borderColor: '#e5e7eb' },
+  'refunded': { label: 'Qaytarildi', color: '#4b5563', bg: '#f3f4f6', borderColor: '#e5e7eb' },
+  'Cancelled': { label: 'Bekor qilindi', color: '#6b7280', bg: '#e5e7eb', borderColor: '#d1d5db' },
+  'cancelled': { label: 'Bekor qilindi', color: '#6b7280', bg: '#e5e7eb', borderColor: '#d1d5db' },
 };
 
 export interface Payment {

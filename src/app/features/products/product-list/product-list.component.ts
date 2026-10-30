@@ -1927,6 +1927,9 @@ export class ProductListComponent implements OnInit {
     if (t.includes('soat') || t.includes('watch') || t.includes('smart')) return '⌚';
     if (t.includes('kamera') || t.includes('foto') || t.includes('camera')) return '📷';
     if (t.includes('oyun') || t.includes('game') || t.includes('playstation') || t.includes('xbox')) return '🎮';
+    if (t.includes('oziq') || t.includes('ichimlik') || t.includes('ovqat')) return '🛒';
+    if (t.includes('kimyo') || t.includes('gigiyena') || t.includes('tozalik')) return '🧴';
+    if (t.includes('elektronika')) return '⚡';
     return '📦';
   }
 

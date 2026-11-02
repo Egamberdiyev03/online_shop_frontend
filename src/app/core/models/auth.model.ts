@@ -38,6 +38,10 @@ export interface AuthResponseDto {
   userId?: number;
 }
 
+export interface TelegramLoginCodeDto {
+  code: string;
+}
+
 export interface DecodedJwtToken {
   nameid?: string;
   sub?: string;

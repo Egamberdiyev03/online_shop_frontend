@@ -1606,6 +1606,23 @@ export class LoginComponent implements OnDestroy {
 
     this.route.queryParams.subscribe(params => {
 
+      if (params['code']) {
+        const code = params['code'];
+        this.isLoading = true;
+        this.authService.telegramLoginByCode(code).subscribe({
+          next: () => {
+            this.isLoading = false;
+            this.router.navigateByUrl(params['returnUrl'] || '/products');
+          },
+          error: (err) => {
+            this.isLoading = false;
+            this.notification.error(err.message || 'Kirish havolasi yaroqsiz yoki muddati tugagan.');
+            this.router.navigate(['/login']);
+          }
+        });
+        return;
+      }
+
       if (params['token']) {
 
         const token = params['token'];

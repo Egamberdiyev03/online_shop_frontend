@@ -9,7 +9,8 @@ import {
   ConfirmEmailDto,
   ForgotPasswordDto,
   ResetPasswordDto,
-  AuthResponseDto
+  AuthResponseDto,
+  TelegramLoginCodeDto
 } from '../models/auth.model';
 import { ResponseModel, unwrapResult } from '../models/response.model';
 import { AuthStateService } from './auth-state.service';
@@ -67,6 +68,42 @@ export class AuthService {
       switchMap(auth => {
         this.authState.saveSession(auth);
         this.notification.success(`Xush kelibsiz, ${auth.name}! Email tasdiqlandi.`);
+        if (auth.userId) {
+          return this.cartService.syncGuestCartToUser(auth.userId).pipe(
+            map(() => auth),
+            catchError(() => of(auth))
+          );
+        }
+        return of(auth);
+      })
+    );
+  }
+
+  /**
+   * Telegram orqali olingan bir martalik maxsus kod orqali tizimga kirish
+   */
+  telegramLoginByCode(code: string): Observable<AuthResponseDto> {
+    const payload: TelegramLoginCodeDto = { code };
+    return this.http.post<ResponseModel<AuthResponseDto> | AuthResponseDto>(`${this.apiUrl}/telegram-login`, payload).pipe(
+      map(res => {
+        if (res && typeof res === 'object') {
+          const resp = res as any;
+          if (resp.statusCode && resp.statusCode >= 400) {
+            throw new Error(resp.message || "Kirish havolasi yaroqsiz yoki muddati tugagan.");
+          }
+          if (resp.result === null && resp.message) {
+            throw new Error(resp.message);
+          }
+        }
+        const auth = unwrapResult(res);
+        if (!auth || !auth.token) {
+          throw new Error("Havola yaroqsiz yoki muddati tugagan.");
+        }
+        return auth;
+      }),
+      switchMap(auth => {
+        this.authState.saveSession(auth);
+        this.notification.success(`Xush kelibsiz, ${auth.name}! Telegram orqali muvaffaqiyatli kirdingiz.`);
         if (auth.userId) {
           return this.cartService.syncGuestCartToUser(auth.userId).pipe(
             map(() => auth),

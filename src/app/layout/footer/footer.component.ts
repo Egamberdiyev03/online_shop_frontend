@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+﻿import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 
@@ -73,6 +73,16 @@ import { RouterModule } from '@angular/router';
     @media (max-width: 768px) {
       .footer-container {
         grid-template-columns: 1fr;
+        padding: 2rem 1rem 1.5rem;
+        gap: 1.75rem;
+      }
+      .footer-bottom {
+        padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+      }
+      .footer-bottom-inner {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
       }
     }
     .footer-logo {

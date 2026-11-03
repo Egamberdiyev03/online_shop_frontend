@@ -989,3 +989,579 @@ body.dark-theme .tg-caption,
 .dark-theme .tg-caption {
   color: #94a3b8 !important;
 }
+
+/* ========================================================
+   GLOBAL MOBILE & TELEGRAM MINI APP RESPONSIVE STYLES
+   ======================================================== */
+
+img, svg, video {
+  max-width: 100%;
+  height: auto;
+}
+
+body {
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+h1, h2, h3, h4, h5, h6, p, span, a, label {
+  overflow-wrap: anywhere;
+}
+
+/* iOS auto-zoom prevention: inputs must be at least 16px on mobile */
+@media (max-width: 768px) {
+  input, select, textarea, .form-control, .search-input {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch targets: at least 44px on mobile */
+@media (max-width: 768px) {
+  .btn:not(.btn-sm),
+  button:not(.btn-sm):not(.close-btn):not(.modal-close):not(.stepper-btn):not(.pulse-dot) {
+    min-height: 44px;
+  }
+}
+
+/* Responsive tables */
+.table-responsive,
+.data-table-wrap,
+.dash-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+}
+
+/* Global Mobile Modal Optimization */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 0.5rem;
+    align-items: flex-end !important;
+  }
+
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 90vh !important;
+    max-height: 90dvh !important;
+    border-radius: 20px 20px 0 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .modal-header {
+    padding: 1rem 1.25rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .modal-body {
+    padding: 1.25rem !important;
+    overflow-y: auto !important;
+    flex: 1 1 auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal-footer {
+    padding: 0.875rem 1.25rem !important;
+    flex-shrink: 0 !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  .modal-footer .btn {
+    flex: 1 1 calc(50% - 0.5rem) !important;
+  }
+
+  .page-container {
+    padding: 1rem 0.875rem 2rem !important;
+  }
+
+  .page-title {
+    font-size: clamp(1.35rem, 5vw, 1.75rem) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-container {
+    padding: 0.75rem 0.625rem 1.75rem !important;
+  }
+}
+
+/* ========================================================
+   COMPREHENSIVE PAGE-SPECIFIC MOBILE RESPONSIVE SUITE
+   ======================================================== */
+
+@media (max-width: 768px) {
+  /* 1. Page Headers & Action Groups */
+  .page-header, .dash-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .header-actions, .header-action-group, .topbar-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  .header-actions .btn,
+  .header-action-group .btn,
+  .topbar-actions .btn {
+    width: 100% !important;
+    min-height: 44px !important;
+    justify-content: center !important;
+  }
+
+  /* 2. Products List Page */
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+    gap: 1rem !important;
+  }
+
+  .filter-panel {
+    position: relative !important;
+    top: auto !important;
+    padding: 0.875rem !important;
+    border-radius: 12px !important;
+  }
+
+  .filter-bottom-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+  }
+
+  .sort-dropdown-wrapper,
+  .custom-select,
+  .select-trigger,
+  .select-options {
+    width: 100% !important;
+  }
+
+  .pagination-bar {
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    justify-content: center !important;
+  }
+
+  /* 3. Product Detail Page */
+  .product-showcase {
+    grid-template-columns: 1fr !important;
+    padding: 1rem !important;
+    gap: 1.25rem !important;
+  }
+
+  .image-section {
+    height: 270px !important;
+  }
+
+  .purchase-box {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .purchase-box .quantity-picker {
+    align-self: center !important;
+    height: 44px !important;
+  }
+
+  .purchase-box .btn {
+    width: 100% !important;
+    min-height: 44px !important;
+    justify-content: center !important;
+  }
+
+  /* 4. Cart View Page */
+  .cart-layout {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+
+  .table-header {
+    display: none !important;
+  }
+
+  .cart-item-row {
+    flex-wrap: wrap !important;
+    gap: 0.75rem !important;
+    padding: 0.875rem !important;
+    position: relative !important;
+  }
+
+  .product-cell {
+    flex: 1 1 100% !important;
+  }
+
+  .price-cell {
+    display: none !important;
+  }
+
+  .qty-cell {
+    flex: 0 0 auto !important;
+  }
+
+  .total-cell {
+    flex: 1 1 auto !important;
+    text-align: right !important;
+    font-size: 1.05rem !important;
+  }
+
+  .action-cell {
+    flex: 0 0 auto !important;
+  }
+
+  .cart-actions-row {
+    flex-direction: column-reverse !important;
+    gap: 0.75rem !important;
+  }
+
+  .cart-actions-row .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* 5. Orders List Page */
+  .container {
+    padding: 1rem 0.75rem 2rem !important;
+  }
+
+  .mode-toggle {
+    width: 100% !important;
+  }
+
+  .toggle-btn {
+    flex: 1 !important;
+    text-align: center !important;
+    padding: 0.5rem !important;
+  }
+
+  .filter-bar {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    padding: 0.875rem !important;
+  }
+
+  .filter-col {
+    width: 100% !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.35rem !important;
+  }
+
+  .filter-col select,
+  .filter-col input {
+    width: 100% !important;
+  }
+
+  .order-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.65rem !important;
+    padding: 0.875rem 1rem !important;
+  }
+
+  .order-id-block {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .header-right {
+    width: 100% !important;
+    justify-content: space-between !important;
+    gap: 0.5rem !important;
+  }
+
+  .order-items-wrapper {
+    padding: 0.75rem 1rem !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .items-table {
+    min-width: 320px !important;
+  }
+
+  .order-footer {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+    padding: 0.875rem 1rem !important;
+  }
+
+  .total-block {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: baseline !important;
+    width: 100% !important;
+  }
+
+  .footer-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  .footer-actions .btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+  }
+
+  /* 6. Payments Pages */
+  .payments-page-container,
+  .admin-page-container,
+  .payment-detail-container {
+    padding: 1rem 0.75rem 2rem !important;
+  }
+
+  .chips-row, .status-tabs-row {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 0.35rem !important;
+    gap: 0.35rem !important;
+  }
+
+  .chip-btn, .tab-btn {
+    flex: 0 0 auto !important;
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  .payments-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  .card-header, .card-footer {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  .card-footer .btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 44px !important;
+  }
+
+  .table-card, .recent-orders-card {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .admin-payments-table, .dash-table {
+    min-width: 550px !important;
+  }
+
+  .detail-layout, .detail-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  /* 7. Companies & Branches Pages */
+  .companies-grid, .categories-grid, .customers-grid, .branches-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  .company-card, .category-card, .customer-card, .branch-card {
+    padding: 1rem !important;
+  }
+
+  .company-header-card, .branch-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+    padding: 1rem !important;
+  }
+
+  .card-actions, .branch-actions {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  .card-actions .btn, .branch-actions .btn {
+    flex: 1 1 calc(50% - 0.5rem) !important;
+    min-height: 44px !important;
+    justify-content: center !important;
+  }
+
+  .stats-bar, .mini-stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  .active-customer-banner {
+    flex-direction: column !important;
+    text-align: center !important;
+    align-items: center !important;
+    padding: 1.25rem 1rem !important;
+  }
+
+  .banner-left {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+
+  .active-details {
+    justify-content: center !important;
+  }
+
+  /* 8. Admin Dashboard */
+  .dash-container {
+    padding: 1rem 0.75rem 2rem !important;
+  }
+
+  .admin-profile-pill {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  .analytics-grid, .widgets-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  /* 9. Profile Page */
+  .profile-container {
+    padding: 1rem 0.75rem 2rem !important;
+  }
+
+  .profile-user-banner {
+    flex-direction: column !important;
+    text-align: center !important;
+    gap: 0.75rem !important;
+    align-items: center !important;
+    padding: 1.25rem 1rem !important;
+  }
+
+  .profile-body {
+    padding: 1.25rem 1rem !important;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse !important;
+    gap: 0.5rem !important;
+  }
+
+  .form-actions .btn {
+    width: 100% !important;
+    min-height: 44px !important;
+    justify-content: center !important;
+  }
+
+  /* 10. Map & Location Picker */
+  .map-main-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+  }
+
+  .map-viewport-section {
+    height: 50dvh !important;
+    min-height: 280px !important;
+    width: 100% !important;
+  }
+
+  .branches-sidebar-panel {
+    height: auto !important;
+    max-height: 45dvh !important;
+    width: 100% !important;
+  }
+
+  .modal-backdrop {
+    padding: 0.5rem !important;
+    align-items: flex-end !important;
+  }
+
+  .modal-container {
+    max-width: 100% !important;
+    border-radius: 18px 18px 0 0 !important;
+    max-height: 90dvh !important;
+    overflow-y: auto !important;
+  }
+
+  .map-wrapper {
+    height: 220px !important;
+  }
+
+  /* 11. Toast Notifications */
+  .toast-container {
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+    right: 0.75rem !important;
+    left: 0.75rem !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  .toast-item {
+    padding: 0.75rem 0.875rem !important;
+  }
+}
+
+/* Kichik telefonlar (<= 480px, masalan 320px - 414px) */
+@media (max-width: 480px) {
+  .products-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .card-image-wrap {
+    height: 190px !important;
+  }
+
+  .auth-page {
+    padding: 0.75rem 0.5rem !important;
+    min-height: calc(100dvh - 120px) !important;
+  }
+
+  .auth-card {
+    padding: 1.5rem 1rem !important;
+    border-radius: 14px !important;
+  }
+
+  .auth-title {
+    font-size: 1.35rem !important;
+  }
+
+  .otp-input {
+    letter-spacing: 0.35rem !important;
+    font-size: 1.3rem !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .step-col {
+    min-width: 65px !important;
+  }
+
+  .step-circle {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 0.7rem !important;
+  }
+
+  .step-name {
+    font-size: 0.65rem !important;
+  }
+
+  .step-hint {
+    display: none !important;
+  }
+
+  .card-actions .btn, .branch-actions .btn {
+    flex: 1 1 100% !important;
+  }
+}

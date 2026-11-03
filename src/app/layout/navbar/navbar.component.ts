@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+﻿import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -651,11 +651,151 @@ import { NotificationBellComponent } from '../../shared/components/notification-
       background: #0f172a;
     }
 
+    /* ===== MOBILE DEDICATED RESPONSIVE NAVBAR (<= 860px) ===== */
     @media (max-width: 860px) {
-      .top-announcement { display: none; }
-      .nav-links { gap: 0.15rem; }
-      .nav-link { padding: 0.45rem 0.65rem; font-size: 0.825rem; }
-      .brand-name { font-size: 1.15rem; }
+      .top-announcement { 
+        display: none !important; 
+      }
+      
+      .top-bar {
+        padding: 0.3rem 0.75rem;
+      }
+      
+      .top-bar-inner {
+        justify-content: flex-end;
+        gap: 0.35rem;
+      }
+
+      .top-actions {
+        width: 100%;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+
+      .auth-section {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        font-size: 0.75rem;
+      }
+
+      .user-profile-section {
+        width: 100%;
+        justify-content: space-between;
+        gap: 0.35rem;
+      }
+
+      .user-role-badge {
+        font-size: 0.65rem;
+        padding: 0.1rem 0.35rem;
+      }
+
+      .user-name {
+        font-size: 0.75rem;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      .logout-btn {
+        padding: 0.2rem 0.45rem;
+        font-size: 0.7rem;
+      }
+
+      .main-nav {
+        padding: 0.5rem 0.75rem;
+      }
+
+      /* 2-qatorli mobil tartib: 1-qator: logo + actions; 2-qator: nav-links */
+      .nav-container {
+        flex-wrap: wrap;
+        gap: 0.4rem 0.5rem;
+      }
+
+      .brand-logo {
+        order: 1;
+        gap: 0.4rem;
+      }
+
+      .logo-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1.3rem;
+        border-radius: 8px;
+      }
+
+      .brand-name {
+        font-size: 1.15rem;
+      }
+
+      .brand-tag {
+        display: none;
+      }
+
+      .nav-actions {
+        order: 2;
+        gap: 0.35rem;
+      }
+
+      .theme-toggle-btn {
+        padding: 0.4rem;
+        min-width: 38px;
+        min-height: 38px;
+        border-radius: 50%;
+        justify-content: center;
+        gap: 0;
+      }
+
+      .theme-text {
+        display: none !important;
+      }
+
+      .cart-pill-btn {
+        padding: 0.4rem 0.65rem;
+        gap: 0.35rem;
+      }
+
+      .cart-title {
+        display: none !important;
+      }
+
+      .cart-badge {
+        padding: 0.1rem 0.4rem;
+        font-size: 0.7rem;
+      }
+
+      .nav-links {
+        order: 3;
+        width: 100%;
+        display: flex;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        padding: 0.35rem 0 0.15rem;
+        gap: 0.25rem;
+        border-top: 1px solid rgba(226, 232, 240, 0.7);
+      }
+
+      :host-context(body.dark-theme) .nav-links,
+      :host-context(.dark-theme) .nav-links {
+        border-top-color: #1e293b;
+      }
+
+      .nav-links::-webkit-scrollbar {
+        display: none;
+      }
+
+      .nav-link {
+        flex: 0 0 auto;
+        padding: 0.35rem 0.65rem;
+        font-size: 0.825rem;
+        border-radius: 6px;
+      }
     }
   `]
 })

@@ -54,3 +54,6 @@ export interface DecodedJwtToken {
   aud?: string;
   [key: string]: any;
 }
+export interface TelegramMiniAppDto {
+  initData: string;
+}

@@ -10,12 +10,14 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   AuthResponseDto,
-  TelegramLoginCodeDto
+  TelegramLoginCodeDto,
+  TelegramMiniAppDto
 } from '../models/auth.model';
 import { ResponseModel, unwrapResult } from '../models/response.model';
 import { AuthStateService } from './auth-state.service';
 import { CartService } from './cart.service';
 import { NotificationService } from './notification.service';
+
 
 @Injectable({
   providedIn: 'root'
@@ -114,6 +116,37 @@ export class AuthService {
       })
     );
   }
+
+  telegramMiniAppLogin(initData: string): Observable<AuthResponseDto> {
+    const payload: TelegramMiniAppDto = { initData };
+    return this.http.post<ResponseModel<AuthResponseDto> | AuthResponseDto>(`${this.apiUrl}/telegram-miniapp`, payload).pipe(
+      map(res => {
+        if (res && typeof res === 'object') {
+          const resp = res as any;
+          if (resp.statusCode && resp.statusCode >= 400) {
+            throw new Error(resp.message || "Telegram orqali kirib bo'lmadi.");
+          }
+        }
+        const auth = unwrapResult(res);
+        if (!auth || !auth.token) {
+          throw new Error("Telegram orqali kirib bo'lmadi.");
+        }
+        return auth;
+      }),
+      switchMap(auth => {
+        this.authState.saveSession(auth);
+        if (auth.userId) {
+          return this.cartService.syncGuestCartToUser(auth.userId).pipe(
+            map(() => auth),
+            catchError(() => of(auth))
+          );
+        }
+        return of(auth);
+      })
+    );
+  }
+
+
 
   /**
    * Email va parol orqali tizimga kirish

@@ -575,8 +575,18 @@ export class ProductDetailComponent implements OnInit {
 
   loadComments(productId: number): void {
     this.commentService.getByProductId(productId).subscribe({
-      next: (comments) => (this.comments = comments || []),
-      error: () => {}
+      next: (comments) => {
+        // API'dan kelgan sharhlarni tekshirish va mapping qilish
+        this.comments = (comments || []).map(c => ({
+          ...c,
+          // Ba'zi API'lar Id (bosh harf) qaytaradi
+          id: c.id || (c as any).Id || 0
+        })).filter(c => c.id > 0); // ID si noto'g'ri sharhlarni filter qilish
+      },
+      error: (err) => {
+        console.error('Load comments error:', err);
+        this.comments = [];
+      }
     });
   }
 
@@ -613,9 +623,9 @@ export class ProductDetailComponent implements OnInit {
     if (this.commentForm.invalid || !this.product) return;
     this.isSubmittingComment = true;
 
-    // Context-based ProductId as mandated in brief:
+    const productId = this.product.id;
     const dto: CreateCommentDto = {
-      productId: this.product.id,
+      productId: productId,
       userId: this.authState.currentCustomerId(),
       content: this.commentForm.value.content,
       starRating: this.selectedStarRating
@@ -627,16 +637,32 @@ export class ProductDetailComponent implements OnInit {
         this.notification.success("Sharhingiz qabul qilindi!");
         this.commentForm.reset();
         this.selectedStarRating = 5;
-        this.loadComments(this.product!.id);
-        this.loadAverageRating(this.product!.id);
+
+        // Yangi sharhni darhol ro'yxatga qo'shish (optimistic update)
+        if (newComment && newComment.id) {
+          this.comments = [newComment, ...this.comments];
+        }
+
+        // Serverdan yangilangan ro'yxatni olish
+        setTimeout(() => {
+          this.loadComments(productId);
+          this.loadAverageRating(productId);
+        }, 300);
       },
       error: () => {
         this.isSubmittingComment = false;
+        this.notification.error("Sharh qo'shishda xatolik yuz berdi.");
       }
     });
   }
 
   deleteComment(commentId: number): void {
+    // ID tekshiruvi - 0 yoki undefined bo'lsa xato
+    if (!commentId || commentId <= 0) {
+      this.notification.error("Sharh ID si noto'g'ri. Sahifani yangilang.");
+      return;
+    }
+
     if (!confirm("Ushbu sharhni o'chirmoqchimisiz?")) return;
 
     this.commentService.delete(commentId).subscribe({
@@ -647,7 +673,10 @@ export class ProductDetailComponent implements OnInit {
           this.loadAverageRating(this.product.id);
         }
       },
-      error: () => {}
+      error: (err) => {
+        this.notification.error("Sharhni o'chirishda xatolik yuz berdi.");
+        console.error('Delete comment error:', err);
+      }
     });
   }
 }

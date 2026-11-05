@@ -40,7 +40,11 @@ interface EnrichedCartItem extends CartItem {
           </div>
           <h1 class="page-title">Sizning savatingiz</h1>
           <p class="page-subtitle">
-            Mijoz #{{ authState.currentCustomerId() || 5 }} uchun saqlangan mahsulotlar
+            <span class="customer-badge">
+              <span class="badge-icon">👤</span>
+              <span class="badge-id">{{ authState.currentCustomerId() || 5 }}</span>
+            </span>
+            uchun saqlangan mahsulotlar
           </p>
         </div>
       </div>
@@ -96,12 +100,16 @@ interface EnrichedCartItem extends CartItem {
                   <a [routerLink]="['/products', item.productId]" class="item-name">
                     {{ item.product?.name || ('Mahsulot #' + item.productId) }}
                   </a>
-                  <span class="item-id">ID: #{{ item.productId }}</span>
+                  <span class="item-id-badge">
+                    <span class="id-label">ID</span>
+                    <span class="id-value">{{ item.productId }}</span>
+                  </span>
                 </div>
               </div>
 
               <div class="price-cell">
-                {{ (item.product?.price || 0) | number:'1.0-0' }} so'm
+                <span class="price-amount">{{ (item.product?.price || 0) | number:'1.0-0' }}</span>
+                <span class="price-currency">so'm</span>
               </div>
 
               <div class="qty-cell">
@@ -121,7 +129,8 @@ interface EnrichedCartItem extends CartItem {
               </div>
 
               <div class="total-cell">
-                {{ ((item.product?.price || 0) * item.quantity) | number:'1.0-0' }} so'm
+                <span class="total-amount">{{ ((item.product?.price || 0) * item.quantity) | number:'1.0-0' }}</span>
+                <span class="total-currency">so'm</span>
               </div>
 
               <div class="action-cell">
@@ -154,7 +163,10 @@ interface EnrichedCartItem extends CartItem {
 
             <div class="summary-line total-line">
               <span>Umumiy summa:</span>
-              <span class="total-val">{{ totalPrice | number:'1.0-0' }} so'm</span>
+              <span class="total-val">
+                <span class="sum-amount">{{ totalPrice | number:'1.0-0' }}</span>
+                <span class="sum-currency">so'm</span>
+              </span>
             </div>
 
             <!-- Checkout Branch Info -->
@@ -275,6 +287,27 @@ interface EnrichedCartItem extends CartItem {
       color: #64748b;
       font-size: 0.9rem;
       margin-top: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .customer-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: #ffffff;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .badge-icon {
+      font-size: 0.75rem;
+    }
+    .badge-id {
+      font-family: 'SF Mono', 'Monaco', monospace;
     }
 
     .admin-notice-card {
@@ -312,6 +345,43 @@ interface EnrichedCartItem extends CartItem {
     @media (max-width: 900px) {
       .cart-layout {
         grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 600px) {
+      .table-header {
+        display: none;
+      }
+      .cart-item-row {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        padding: 1rem;
+      }
+      .product-cell {
+        flex: 1 1 100%;
+      }
+      .price-cell, .total-cell {
+        flex: 1;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.25rem;
+      }
+      .price-amount, .total-amount {
+        font-size: 0.9rem;
+      }
+      .price-currency, .total-currency {
+        font-size: 0.7rem;
+      }
+      .qty-cell {
+        flex: 0 0 auto;
+      }
+      .action-cell {
+        flex: 0 0 auto;
+      }
+      .sum-amount {
+        font-size: 1.2rem;
+      }
+      .sum-currency {
+        font-size: 0.75rem;
       }
     }
     .cart-items-card {
@@ -393,9 +463,30 @@ interface EnrichedCartItem extends CartItem {
     .item-name:hover {
       color: #4f46e5;
     }
-    .item-id {
-      font-size: 0.75rem;
-      color: #94a3b8;
+    .item-id-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      margin-top: 0.25rem;
+    }
+    .id-label {
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: #ffffff;
+      background: #94a3b8;
+      padding: 0.1rem 0.3rem;
+      border-radius: 4px 0 0 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .id-value {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #64748b;
+      background: #f1f5f9;
+      padding: 0.1rem 0.35rem;
+      border-radius: 0 4px 4px 0;
+      font-family: 'SF Mono', 'Monaco', monospace;
     }
     .price-cell {
       flex: 1;
@@ -403,6 +494,20 @@ interface EnrichedCartItem extends CartItem {
       font-size: 0.9rem;
       color: #64748b;
       font-weight: 600;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0;
+    }
+    .price-amount {
+      font-weight: 700;
+      color: #475569;
+      line-height: 1.2;
+    }
+    .price-currency {
+      font-size: 0.65rem;
+      color: #94a3b8;
+      font-weight: 500;
     }
     .qty-cell {
       flex: 1.5;
@@ -443,9 +548,21 @@ interface EnrichedCartItem extends CartItem {
     .total-cell {
       flex: 1.2;
       text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0;
+    }
+    .total-amount {
       font-weight: 800;
       color: #0f172a;
       font-size: 1rem;
+      line-height: 1.2;
+    }
+    .total-currency {
+      font-size: 0.65rem;
+      color: #64748b;
+      font-weight: 500;
     }
     .action-cell {
       width: 40px;
@@ -515,7 +632,18 @@ interface EnrichedCartItem extends CartItem {
     }
     .total-val {
       color: #4f46e5;
+      display: flex;
+      align-items: baseline;
+      gap: 0.3rem;
+    }
+    .sum-amount {
       font-size: 1.4rem;
+      font-weight: 800;
+    }
+    .sum-currency {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #6366f1;
     }
     .checkout-form-box {
       margin-bottom: 1.5rem;

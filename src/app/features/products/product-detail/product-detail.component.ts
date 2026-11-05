@@ -618,15 +618,25 @@ export class ProductDetailComponent implements OnInit {
 
   submitComment(): void {
     if (this.commentForm.invalid || !this.product) return;
+
+    // UserId tekshiruvi
+    const userId = this.authState.currentUser()?.userId || this.authState.currentCustomerId();
+    if (!userId || userId <= 0) {
+      this.notification.error("Sharh qoldirish uchun tizimga kiring!");
+      return;
+    }
+
     this.isSubmittingComment = true;
 
     const productId = this.product.id;
     const dto: CreateCommentDto = {
       productId: productId,
-      userId: this.authState.currentCustomerId(),
+      userId: userId,
       content: this.commentForm.value.content,
       starRating: this.selectedStarRating
     };
+
+    console.log('Submitting comment:', dto);
 
     this.commentService.create(dto).subscribe({
       next: (newComment) => {

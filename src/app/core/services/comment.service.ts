@@ -14,14 +14,7 @@ export class CommentService {
 
   create(dto: CreateCommentDto): Observable<Comment> {
     return this.http.post<ResponseModel<Comment> | Comment>(`${this.apiUrl}/Create`, dto).pipe(
-      map(res => {
-        const comment = unwrapResult(res);
-        // API Id (bosh harf) qaytarishi mumkin
-        if (comment && !(comment as any).id && (comment as any).Id) {
-          (comment as any).id = (comment as any).Id;
-        }
-        return comment;
-      })
+      map(res => unwrapResult(res))
     );
   }
 
@@ -54,14 +47,7 @@ export class CommentService {
 
   getByProductId(productId: number): Observable<Comment[]> {
     return this.http.get<ResponseModel<Comment[]> | Comment[]>(`${this.apiUrl}/GetByProductId?productId=${productId}`).pipe(
-      map(res => {
-        const comments = unwrapResult(res) || [];
-        // API Id (bosh harf) qaytarishi mumkin - mapping qilish
-        return comments.map(c => ({
-          ...c,
-          id: c.id || (c as any).Id || 0
-        }));
-      })
+      map(res => unwrapResult(res) || [])
     );
   }
 

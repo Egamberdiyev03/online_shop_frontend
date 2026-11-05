@@ -196,10 +196,10 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 
               <p class="comment-content">{{ comment.content }}</p>
 
-              <button 
-                *ngIf="authState.isAdminMode() || comment.userId === authState.currentCustomerId()" 
+              <button
+                *ngIf="authState.isAdminMode() || comment.userId === authState.currentCustomerId()"
                 class="delete-comment-btn"
-                (click)="deleteComment(comment.id)"
+                (click)="deleteComment(comment)"
                 title="Sharhni o'chirish"
               >
                 &times; O'chirish
@@ -576,16 +576,13 @@ export class ProductDetailComponent implements OnInit {
   loadComments(productId: number): void {
     this.commentService.getByProductId(productId).subscribe({
       next: (comments) => {
-        // API'dan kelgan sharhlarni tekshirish va mapping qilish
-        this.comments = (comments || []).map(c => ({
-          ...c,
-          // Ba'zi API'lar Id (bosh harf) qaytaradi
-          id: c.id || (c as any).Id || 0
-        })).filter(c => c.id > 0); // ID si noto'g'ri sharhlarni filter qilish
+        console.log('API comments response:', comments);
+        if (Array.isArray(comments) && comments.length > 0) {
+          this.comments = comments;
+        }
       },
       error: (err) => {
         console.error('Load comments error:', err);
-        this.comments = [];
       }
     });
   }
@@ -638,28 +635,38 @@ export class ProductDetailComponent implements OnInit {
         this.commentForm.reset();
         this.selectedStarRating = 5;
 
-        // Yangi sharhni darhol ro'yxatga qo'shish (optimistic update)
-        if (newComment && newComment.id) {
-          this.comments = [newComment, ...this.comments];
+        console.log('New comment response:', newComment);
+
+        // Yangi sharhni ro'yxat boshiga qo'shish
+        if (newComment) {
+          const commentToAdd = {
+            ...newComment,
+            id: newComment.id || (newComment as any).Id,
+            userName: this.authState.userName() || ('Mijoz #' + dto.userId)
+          };
+          this.comments = [commentToAdd, ...this.comments];
         }
 
-        // Serverdan yangilangan ro'yxatni olish
-        setTimeout(() => {
-          this.loadComments(productId);
-          this.loadAverageRating(productId);
-        }, 300);
+        // O'rtacha bahoni yangilash
+        this.loadAverageRating(productId);
       },
-      error: () => {
+      error: (err) => {
         this.isSubmittingComment = false;
         this.notification.error("Sharh qo'shishda xatolik yuz berdi.");
+        console.error('Create comment error:', err);
       }
     });
   }
 
-  deleteComment(commentId: number): void {
-    // ID tekshiruvi - 0 yoki undefined bo'lsa xato
+  deleteComment(comment: Comment): void {
+    const commentId = comment.id || (comment as any).Id;
+
+    console.log('Deleting comment:', comment, 'ID:', commentId);
+
+    // ID tekshiruvi
     if (!commentId || commentId <= 0) {
       this.notification.error("Sharh ID si noto'g'ri. Sahifani yangilang.");
+      console.error('Invalid comment ID:', comment);
       return;
     }
 
@@ -668,7 +675,7 @@ export class ProductDetailComponent implements OnInit {
     this.commentService.delete(commentId).subscribe({
       next: () => {
         this.notification.success("Sharh o'chirildi.");
-        this.comments = this.comments.filter(c => c.id !== commentId);
+        this.comments = this.comments.filter(c => (c.id || (c as any).Id) !== commentId);
         if (this.product) {
           this.loadAverageRating(this.product.id);
         }

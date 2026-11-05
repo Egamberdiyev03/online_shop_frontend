@@ -4,12 +4,14 @@ import { Observable, map, tap, of, forkJoin, catchError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Cart, CartItem, CreateCartDto } from '../models/cart.model';
 import { ResponseModel, unwrapResult } from '../models/response.model';
+import { NotificationService } from './notification.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class CartService {
   private http = inject(HttpClient);
+  private notification = inject(NotificationService);
   private apiUrl = `${environment.apiUrl}/Cart`;
   private readonly GUEST_CART_KEY = 'online_shop_guest_cart';
 
@@ -95,6 +97,14 @@ export class CartService {
       null
     ).pipe(
       map(res => {
+        if (res && typeof res === 'object') {
+          const resp = res as any;
+          if (resp.statusCode && resp.statusCode >= 400) {
+            const msg = resp.message || "Mahsulotni savatga qo'shishda xatolik yuz berdi.";
+            this.notification.error(msg);
+            throw new Error(msg);
+          }
+        }
         const unwrapped = unwrapResult(res);
         return unwrapped === true || unwrapped === null;
       }),
@@ -102,6 +112,11 @@ export class CartService {
         this.getByCustomerId(customerId).subscribe({ error: () => {} });
       })
     );
+  }
+
+  // addToCart alias
+  addToCart(customerId: number, productId: number, quantity: number = 1): Observable<boolean> {
+    return this.addItem(customerId, productId, quantity);
   }
 
   updateQuantity(customerId: number, productId: number, quantity: number): Observable<boolean> {
@@ -123,7 +138,17 @@ export class CartService {
       `${this.apiUrl}/Update?UserId=${customerId}&productId=${productId}&quantity=${quantity}`,
       null
     ).pipe(
-      map(res => unwrapResult(res) === true)
+      map(res => {
+        if (res && typeof res === 'object') {
+          const resp = res as any;
+          if (resp.statusCode && resp.statusCode >= 400) {
+            const msg = resp.message || "Savatni yangilashda xatolik yuz berdi.";
+            this.notification.error(msg);
+            throw new Error(msg);
+          }
+        }
+        return unwrapResult(res) === true;
+      })
     );
   }
 
@@ -141,7 +166,17 @@ export class CartService {
     return this.http.delete<ResponseModel<boolean> | boolean>(
       `${this.apiUrl}/RemoveItemfromCart?UserId=${customerId}&productId=${productId}`
     ).pipe(
-      map(res => unwrapResult(res) === true)
+      map(res => {
+        if (res && typeof res === 'object') {
+          const resp = res as any;
+          if (resp.statusCode && resp.statusCode >= 400) {
+            const msg = resp.message || "Mahsulotni savatdan o'chirishda xatolik yuz berdi.";
+            this.notification.error(msg);
+            throw new Error(msg);
+          }
+        }
+        return unwrapResult(res) === true;
+      })
     );
   }
 

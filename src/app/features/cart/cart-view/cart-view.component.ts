@@ -4,10 +4,8 @@ import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Cart, CartItem } from '../../../core/models/cart.model';
 import { Product } from '../../../core/models/product.model';
-import { CompanyBranch } from '../../../core/models/company-branch.model';
 import { CartService } from '../../../core/services/cart.service';
 import { ProductService } from '../../../core/services/product.service';
-import { CompanyService } from '../../../core/services/company.service';
 import { OrderService } from '../../../core/services/order.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
@@ -159,15 +157,12 @@ interface EnrichedCartItem extends CartItem {
               <span class="total-val">{{ totalPrice | number:'1.0-0' }} so'm</span>
             </div>
 
-            <!-- Checkout Branch Selector Form (Matching UI Spec: Qaysi filialdan qabul qilasiz? *) -->
+            <!-- Checkout Branch Info -->
             <div class="checkout-form-box">
-              <label class="form-label">Qaysi filialdan qabul qilasiz? *</label>
-              <select class="form-control" [(ngModel)]="selectedBranchId">
-                <option [ngValue]="null" disabled>Filialni tanlang</option>
-                <option *ngFor="let branch of branches" [ngValue]="branch.id">
-                  {{ branch.name }} — {{ branch.address }}
-                </option>
-              </select>
+              <div class="branch-auto-notice">
+                <span class="notice-icon">🏢</span>
+                <p class="notice-text">Buyurtma mahsulot joylashgan filialga avtomatik yuboriladi.</p>
+              </div>
             </div>
 
             <!-- Yetkazib berish manzili -->
@@ -194,7 +189,7 @@ interface EnrichedCartItem extends CartItem {
 
             <button 
               class="btn btn-primary btn-lg checkout-btn" 
-              [disabled]="isPlacingOrder || !selectedBranchId"
+              [disabled]="isPlacingOrder"
               (click)="checkout()"
             >
               <span>🛍️</span>
@@ -525,6 +520,32 @@ interface EnrichedCartItem extends CartItem {
     .checkout-form-box {
       margin-bottom: 1.5rem;
     }
+    .branch-auto-notice {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.85rem 1rem;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      color: #166534;
+      line-height: 1.4;
+    }
+    .branch-auto-notice .notice-icon {
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .branch-auto-notice .notice-text {
+      margin: 0;
+      font-weight: 500;
+    }
+    :host-context(body.dark-theme) .branch-auto-notice,
+    :host-context(.dark-theme) .branch-auto-notice {
+      background: rgba(34, 197, 94, 0.1);
+      border-color: rgba(34, 197, 94, 0.2);
+      color: #86efac;
+    }
     .checkout-btn {
       width: 100%;
       padding: 0.85rem 1.25rem;
@@ -683,7 +704,6 @@ interface EnrichedCartItem extends CartItem {
 export class CartViewComponent implements OnInit {
   private cartService = inject(CartService);
   private productService = inject(ProductService);
-  private companyService = inject(CompanyService);
   private orderService = inject(OrderService);
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
@@ -691,8 +711,6 @@ export class CartViewComponent implements OnInit {
 
   rawCart: Cart | null = null;
   enrichedItems: EnrichedCartItem[] = [];
-  branches: CompanyBranch[] = [];
-  selectedBranchId: number | null = null;
 
   isLoading = true;
   updatingProductId: number | null = null;
@@ -705,7 +723,6 @@ export class CartViewComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadCart();
-    this.loadBranches();
   }
 
   loadCart(): void {
@@ -748,27 +765,6 @@ export class CartViewComponent implements OnInit {
       error: () => {
         this.enrichedItems = items.map(item => ({ ...item }));
         this.isLoading = false;
-      }
-    });
-  }
-
-  private loadBranches(): void {
-    this.companyService.getAllBranches().subscribe({
-      next: (branches) => {
-        this.branches = branches || [];
-        const userBranch = this.authState.userBranchId();
-        if (userBranch && branches.some(b => b.id === userBranch)) {
-          this.selectedBranchId = userBranch;
-        } else if (branches.length > 0) {
-          this.selectedBranchId = branches[0].id;
-        }
-      },
-      error: (err) => {
-        console.error('[Cart] Error loading branches:', err);
-        this.branches = [];
-        if (err?.status === 403) {
-          this.notification.error('Filiallar ro\'yxatini yuklashda ruxsat yo\'q. Administrator bilan bog\'laning.');
-        }
       }
     });
   }
@@ -821,21 +817,9 @@ export class CartViewComponent implements OnInit {
       return;
     }
 
-    if (!this.selectedBranchId) {
-      this.notification.warning("Iltimos, filialni tanlang!");
-      return;
-    }
-
     this.isPlacingOrder = true;
-    const customerId = this.authState.currentCustomerId();
 
-    this.orderService.createOrder(
-      customerId,
-      this.selectedBranchId,
-      this.deliveryLocation?.address,
-      this.deliveryLocation?.latitude,
-      this.deliveryLocation?.longitude
-    ).subscribe({
+    this.orderService.createOrder().subscribe({
       next: () => {
         this.isPlacingOrder = false;
         this.cartService.clearLocalCart();

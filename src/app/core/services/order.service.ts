@@ -13,28 +13,8 @@ export class OrderService {
   private http = inject(HttpClient);
   private apiUrl = `${environment.apiUrl}/Order`;
 
-  createOrder(
-    customerId: number,
-    branchId: number,
-    deliveryAddress?: string,
-    deliveryLatitude?: number,
-    deliveryLongitude?: number
-  ): Observable<boolean> {
-    // Query params
-    let url = `${this.apiUrl}/Create?userId=${customerId}&branchId=${branchId}`;
-
-    // Yetkazish ma'lumotlari (agar mavjud bo'lsa)
-    if (deliveryAddress) {
-      url += `&deliveryAddress=${encodeURIComponent(deliveryAddress)}`;
-    }
-    if (deliveryLatitude !== undefined) {
-      url += `&deliveryLatitude=${deliveryLatitude}`;
-    }
-    if (deliveryLongitude !== undefined) {
-      url += `&deliveryLongitude=${deliveryLongitude}`;
-    }
-
-    return this.http.post<ResponseModel<boolean> | boolean>(url, null).pipe(
+  createOrder(): Observable<boolean> {
+    return this.http.post<ResponseModel<boolean> | boolean>(`${this.apiUrl}/Create`, null).pipe(
       map(res => {
         if (res && typeof res === 'object') {
           const resp = res as any;
@@ -75,10 +55,15 @@ export class OrderService {
     );
   }
 
-  getByCustomerId(customerId: number): Observable<Order[]> {
-    return this.http.get<ResponseModel<Order[]> | Order[]>(`${this.apiUrl}/GetOrderByUserId?customerId=${customerId}`).pipe(
+  getMyOrders(): Observable<Order[]> {
+    return this.http.get<ResponseModel<Order[]> | Order[]>(`${this.apiUrl}/GetOrderByUserId`).pipe(
       map(res => this.normalizeOrders(unwrapResult(res)))
     );
+  }
+
+  // Eskirgan chaqiruvlar uchun moslik (orqaga moslashuv)
+  getByCustomerId(_customerId?: number): Observable<Order[]> {
+    return this.getMyOrders();
   }
 
   updateStatus(orderId: number, status: OrderStatus): Observable<boolean> {

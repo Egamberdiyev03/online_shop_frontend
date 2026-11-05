@@ -1911,8 +1911,7 @@ export class OrdersListComponent implements OnInit {
     this.errorMessage = '';
 
     if (this.viewMode === 'my') {
-      const customerId = this.authState.currentCustomerId();
-      if (!customerId || customerId <= 0) {
+      if (!this.authState.isAuthenticated()) {
         this.isLoading = false;
         this.allOrders = [];
         this.orders = [];
@@ -1920,7 +1919,7 @@ export class OrdersListComponent implements OnInit {
         this.paginatedOrders = [];
         return;
       }
-      this.orderService.getByCustomerId(customerId).subscribe({
+      this.orderService.getMyOrders().subscribe({
         next: (orders) => {
           this.allOrders = orders || [];
           this.orders = this.allOrders;

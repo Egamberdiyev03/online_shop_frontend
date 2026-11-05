@@ -1,8 +1,11 @@
-<app-navbar></app-navbar>
+<!-- Telegram Mini App'da compact navbar, oddiy brauzerlarda to'liq navbar -->
+<app-navbar *ngIf="!tg.isMiniApp()"></app-navbar>
 
-<main class="main-content">
+<main class="main-content" [class.tg-main]="tg.isMiniApp()">
   <router-outlet></router-outlet>
 </main>
 
-<app-footer></app-footer>
+<!-- Telegram Mini App'da footer yashirin, bottom nav ko'rsatiladi -->
+<app-footer *ngIf="!tg.isMiniApp()"></app-footer>
+<app-bottom-nav *ngIf="tg.isMiniApp()"></app-bottom-nav>
 <app-toast></app-toast>

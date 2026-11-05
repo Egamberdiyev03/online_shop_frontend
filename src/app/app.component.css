@@ -12,3 +12,9 @@
   flex-direction: column;
   width: 100%;
 }
+
+/* Telegram Mini App uchun main content */
+.main-content.tg-main {
+  padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  min-height: var(--tg-viewport-height, 100dvh);
+}

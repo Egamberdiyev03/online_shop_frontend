@@ -2295,9 +2295,11 @@ export class ProductListComponent implements OnInit {
     this.addingProductId = product.id;
 
     this.cartService.addItem(customerId, product.id, 1).subscribe({
-      next: () => {
+      next: (success) => {
         this.addingProductId = null;
-        this.notification.success(`"${product.name}" savatga qo'shildi!`);
+        if (success) {
+          this.notification.success(`"${product.name}" savatga qo'shildi!`);
+        }
       },
       error: () => {
         this.addingProductId = null;

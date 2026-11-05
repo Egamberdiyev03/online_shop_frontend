@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, map, tap, of, forkJoin, catchError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Cart, CartItem, CreateCartDto } from '../models/cart.model';
-import { ResponseModel, unwrapResult } from '../models/response.model';
+import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
 import { NotificationService } from './notification.service';
 
 @Injectable({
@@ -99,14 +99,19 @@ export class CartService {
       map(res => {
         if (res && typeof res === 'object') {
           const resp = res as any;
-          if (resp.statusCode && resp.statusCode >= 400) {
+          if (isErrorResponse(resp)) {
             const msg = resp.message || "Mahsulotni savatga qo'shishda xatolik yuz berdi.";
             this.notification.error(msg);
             throw new Error(msg);
           }
         }
         const unwrapped = unwrapResult(res);
-        return unwrapped === true || unwrapped === null;
+        if (unwrapped === false) {
+          const msg = (res as any)?.message || "Mahsulotni savatga qo'shib bo'lmadi.";
+          this.notification.error(msg);
+          throw new Error(msg);
+        }
+        return true;
       }),
       tap(() => {
         this.getByCustomerId(customerId).subscribe({ error: () => {} });
@@ -141,7 +146,7 @@ export class CartService {
       map(res => {
         if (res && typeof res === 'object') {
           const resp = res as any;
-          if (resp.statusCode && resp.statusCode >= 400) {
+          if (isErrorResponse(resp)) {
             const msg = resp.message || "Savatni yangilashda xatolik yuz berdi.";
             this.notification.error(msg);
             throw new Error(msg);
@@ -169,7 +174,7 @@ export class CartService {
       map(res => {
         if (res && typeof res === 'object') {
           const resp = res as any;
-          if (resp.statusCode && resp.statusCode >= 400) {
+          if (isErrorResponse(resp)) {
             const msg = resp.message || "Mahsulotni savatdan o'chirishda xatolik yuz berdi.";
             this.notification.error(msg);
             throw new Error(msg);

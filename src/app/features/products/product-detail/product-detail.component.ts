@@ -597,9 +597,11 @@ export class ProductDetailComponent implements OnInit {
     const customerId = this.authState.currentCustomerId();
 
     this.cartService.addItem(customerId, this.product.id, this.selectedQuantity).subscribe({
-      next: () => {
+      next: (success) => {
         this.isAddingToCart = false;
-        this.notification.success(`${this.selectedQuantity} ta "${this.product?.name}" savatga qo'shildi!`);
+        if (success) {
+          this.notification.success(`${this.selectedQuantity} ta "${this.product?.name}" savatga qo'shildi!`);
+        }
       },
       error: () => {
         this.isAddingToCart = false;

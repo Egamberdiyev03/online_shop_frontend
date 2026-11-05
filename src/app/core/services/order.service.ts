@@ -4,7 +4,7 @@ import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Order, OrderStatus, OrderFilter, OrderStatusCounts, parseOrderStatus } from '../models/order.model';
 import { PagedResult } from '../models/payment.model';
-import { ResponseModel, unwrapResult } from '../models/response.model';
+import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
 
 @Injectable({
   providedIn: 'root'
@@ -18,7 +18,7 @@ export class OrderService {
       map(res => {
         if (res && typeof res === 'object') {
           const resp = res as any;
-          if (resp.statusCode && resp.statusCode >= 400) {
+          if (isErrorResponse(resp)) {
             throw new Error(resp.message || "Buyurtma berishda xatolik yuz berdi.");
           }
         }

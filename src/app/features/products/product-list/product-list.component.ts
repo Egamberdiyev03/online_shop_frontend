@@ -1436,6 +1436,82 @@ import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashb
       cursor: pointer;
     }
 
+    /* ===== PAGINATION MOBILE / TELEGRAM MINI APP ===== */
+    @media (max-width: 640px) {
+      .pagination-bar {
+        flex-direction: column;
+        padding: 0.875rem;
+        gap: 0.75rem;
+      }
+
+      .pagination-info {
+        order: 2;
+        font-size: 0.8125rem;
+      }
+
+      .pagination-controls {
+        order: 1;
+        width: 100%;
+        justify-content: center;
+        gap: 0.375rem;
+      }
+
+      .page-btn {
+        min-width: 40px;
+        height: 40px;
+        font-size: 0.9375rem;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+
+      .page-btn:active:not(:disabled) {
+        transform: scale(0.92);
+        opacity: 0.8;
+      }
+
+      .page-btn.nav-btn {
+        min-width: 44px;
+        height: 44px;
+      }
+
+      .page-btn.nav-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .page-dots {
+        padding: 0 0.125rem;
+        font-size: 0.875rem;
+      }
+
+      .page-size-picker {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border, #e2e8f0);
+      }
+
+      .size-select {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.9375rem;
+        min-width: 60px;
+      }
+    }
+
+    /* Telegram Mini App safe area */
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      .pagination-bar {
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+      }
+
+      @media (max-width: 640px) {
+        .pagination-bar {
+          padding-bottom: calc(0.875rem + env(safe-area-inset-bottom, 0px));
+        }
+      }
+    }
+
     /* ===== DARK THEME ===== */
     :host-context(body.dark-theme) .page-wrapper,
     :host-context(.dark-theme) .page-wrapper {
@@ -1897,6 +1973,7 @@ export class ProductListComponent implements OnInit {
 
   selectCategory(categoryId: number | null): void {
     if (this.selectedCategoryId === categoryId) return;
+    this.tg.hapticImpact('light');
     this.selectedCategoryId = categoryId;
     this.currentPage = 1;
     this.updateUrlParams();
@@ -2034,6 +2111,7 @@ export class ProductListComponent implements OnInit {
 
   goToPage(p: number): void {
     if (p < 1 || p > this.totalPages || p === this.currentPage) return;
+    this.tg.hapticImpact('light');
     this.currentPage = p;
     this.updateUrlParams();
     this.loadData();
@@ -2053,6 +2131,7 @@ export class ProductListComponent implements OnInit {
   }
 
   onPageSizeChange(newSize: string | number): void {
+    this.tg.hapticImpact('light');
     this.pageSize = Number(newSize);
     this.currentPage = 1;
     this.updateUrlParams();

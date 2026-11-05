@@ -12,6 +12,7 @@ import { CartService } from '../../../core/services/cart.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { NotificationService } from '../../../core/services/notification.service';
+import { TelegramService } from '../../../core/services/telegram.service';
 import { ProductFormModalComponent } from '../product-form-modal/product-form-modal.component';
 import { StatCardComponent } from '../../../shared/components/dashboard/stat-card/stat-card.component';
 import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashboard/chart-card/chart-card.component';
@@ -339,7 +340,7 @@ import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashb
         <!-- Products Grid -->
         <div class="products-grid" *ngIf="!isLoading && products.length > 0">
           <div class="product-card" *ngFor="let product of products">
-            <div class="card-image-wrap" [routerLink]="['/products', product.id]">
+            <div class="card-image-wrap" (click)="goToProduct(product.id)">
               <img
                 *ngIf="product.image"
                 [src]="product.image"
@@ -391,7 +392,7 @@ import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashb
                 {{ getCategoryTitle(product.categoryId) }}
               </div>
 
-              <h3 class="product-name" [routerLink]="['/products', product.id]">
+              <h3 class="product-name" (click)="goToProduct(product.id)">
                 {{ product.name }}
               </h3>
 
@@ -1302,6 +1303,12 @@ import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashb
       display: flex;
       align-items: center;
       justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s ease;
+    }
+
+    .card-image-wrap:active {
+      opacity: 0.8;
     }
 
     .product-image {
@@ -1458,11 +1465,16 @@ import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashb
       -webkit-box-orient: vertical;
       overflow: hidden;
       line-height: 1.4;
-      transition: color 0.2s;
+      transition: color 0.2s, opacity 0.15s;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .product-name:hover {
       color: var(--primary, #6366f1);
+    }
+
+    .product-name:active {
+      opacity: 0.7;
     }
 
     .product-desc {
@@ -1844,6 +1856,7 @@ export class ProductListComponent implements OnInit {
   private notification = inject(NotificationService);
   private companyService = inject(CompanyService);
   private destroyRef = inject(DestroyRef);
+  private tg = inject(TelegramService);
   authState = inject(AuthStateService);
 
   Math = Math; // For template usage
@@ -2256,6 +2269,11 @@ export class ProductListComponent implements OnInit {
     } else if (this.sortBy === 'newest') {
       this.products.sort((a, b) => b.id - a.id);
     }
+  }
+
+  goToProduct(productId: number): void {
+    this.tg.hapticImpact('light');
+    this.router.navigate(['/products', productId]);
   }
 
   goToPage(p: number): void {

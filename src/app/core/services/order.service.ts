@@ -61,6 +61,36 @@ export class OrderService {
     );
   }
 
+  /**
+   * Pagination bilan foydalanuvchi buyurtmalarini olish
+   * Backend: GET /api/Order/GetOrderByUserId?pageNumber=1&pageSize=10
+   */
+  getMyOrdersPaged(pageNumber: number = 1, pageSize: number = 10): Observable<PagedResult<Order>> {
+    const clampedPageSize = Math.min(pageSize, 50); // max 50
+    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/GetOrderByUserId?pageNumber=${pageNumber}&pageSize=${clampedPageSize}`).pipe(
+      map(res => {
+        const data = unwrapResult(res);
+        if (data && data.items) {
+          return {
+            ...data,
+            items: this.normalizeOrders(data.items),
+            totalCount: data.totalCount || data.total || 0
+          };
+        }
+        // Agar bo'sh javob kelsa
+        return {
+          items: [],
+          totalCount: 0,
+          pageNumber: pageNumber,
+          pageSize: clampedPageSize,
+          totalPages: 0,
+          hasPreviousPage: false,
+          hasNextPage: false
+        };
+      })
+    );
+  }
+
   // Eskirgan chaqiruvlar uchun moslik (orqaga moslashuv)
   getByCustomerId(_customerId?: number): Observable<Order[]> {
     return this.getMyOrders();

@@ -282,19 +282,80 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
         </div>
       </div>
 
-      <!-- Load More / Pagination -->
-      <div class="load-more-section" *ngIf="!isLoading && !hasError && totalPages > 1">
+      <!-- Pagination (server-side for 'my' mode) -->
+      <div class="pagination-bar" *ngIf="!isLoading && !hasError && viewMode === 'my' && totalPages > 1">
+        <div class="pagination-info">
+          Jami <strong>{{ totalItems }}</strong> ta buyurtma
+        </div>
+
+        <div class="pagination-controls">
+          <button
+            class="page-btn nav-btn"
+            [disabled]="!hasPreviousPage"
+            (click)="prevPage()"
+            aria-label="Oldingi sahifa"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+
+          <button
+            *ngIf="visiblePages[0] > 1"
+            class="page-btn"
+            (click)="goToPage(1)"
+          >1</button>
+          <span *ngIf="visiblePages[0] > 2" class="page-dots">...</span>
+
+          <button
+            *ngFor="let p of visiblePages"
+            class="page-btn"
+            [class.active]="p === currentPage"
+            (click)="goToPage(p)"
+          >{{ p }}</button>
+
+          <span *ngIf="visiblePages[visiblePages.length - 1] < totalPages - 1" class="page-dots">...</span>
+          <button
+            *ngIf="visiblePages[visiblePages.length - 1] < totalPages"
+            class="page-btn"
+            (click)="goToPage(totalPages)"
+          >{{ totalPages }}</button>
+
+          <button
+            class="page-btn nav-btn"
+            [disabled]="!hasNextPage"
+            (click)="nextPage()"
+            aria-label="Keyingi sahifa"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="page-size-picker">
+          <span class="size-label">Sahifada:</span>
+          <select [value]="pageSize" (change)="onPageSizeChange(+$any($event.target).value)">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Load More (client-side for 'all' mode) -->
+      <div class="load-more-section" *ngIf="!isLoading && !hasError && viewMode === 'all' && filteredOrders.length > displayedCount">
         <div class="page-info-text">
-          {{ Math.min(displayedCount, filteredOrders.length) }} / {{ filteredOrders.length }} ta buyurtma ko‘rsatilmoqda
+          {{ Math.min(displayedCount, filteredOrders.length) }} / {{ filteredOrders.length }} ta buyurtma ko'rsatilmoqda
         </div>
         <div class="load-more-actions">
-          <button 
-            *ngIf="displayedCount < filteredOrders.length"
-            type="button" 
+          <button
+            type="button"
             class="btn btn-secondary load-more-btn"
             (click)="loadMore()"
           >
-            Yana yuklash ({{ Math.min(orderFilter.pageSize || 10, filteredOrders.length - displayedCount) }} ta)
+            Yana yuklash ({{ Math.min(orderFilter.pageSize || 5, filteredOrders.length - displayedCount) }} ta)
           </button>
         </div>
       </div>
@@ -1411,6 +1472,93 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       object-fit: contain;
     }
 
+    /* Pagination bar */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      margin-top: 1.5rem;
+      margin-bottom: 2rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .pagination-info {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .page-btn {
+      min-width: 36px;
+      height: 36px;
+      padding: 0 0.65rem;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #475569;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .page-btn:hover:not(:disabled):not(.active) {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    .page-btn.active {
+      background: #4f46e5;
+      border-color: #4f46e5;
+      color: #ffffff;
+    }
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .page-btn.nav-btn {
+      background: #f8fafc;
+    }
+    .page-dots {
+      color: #94a3b8;
+      padding: 0 0.25rem;
+    }
+    .page-size-picker {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .size-label {
+      font-size: 0.8125rem;
+      color: #64748b;
+    }
+    .page-size-picker select {
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      font-size: 0.8125rem;
+      background: #ffffff;
+      cursor: pointer;
+    }
+    @media (max-width: 640px) {
+      .pagination-bar {
+        justify-content: center;
+      }
+      .pagination-info, .page-size-picker {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+      }
+    }
+
     /* Load more / pagination */
     .load-more-section {
       display: flex;
@@ -1626,9 +1774,14 @@ export class OrdersListComponent implements OnInit {
   hasError = false;
   errorMessage = '';
 
-  // Pagination state
-  displayedCount = 10;
+  // Pagination state (server-side for 'my' mode)
+  displayedCount = 5;
   totalPages = 1;
+  currentPage = 1;
+  pageSize = 5;
+  totalItems = 0;
+  hasPreviousPage = false;
+  hasNextPage = false;
 
   // Active filter state
   orderFilter: OrderFilter = {
@@ -1641,7 +1794,7 @@ export class OrdersListComponent implements OnInit {
     paymentStatus: 'all',
     sortBy: 'createdAt_desc',
     pageNumber: 1,
-    pageSize: 10
+    pageSize: 5
   };
 
   // Status counts (calculated over all customer/role orders, independent of active filters)
@@ -1754,11 +1907,11 @@ export class OrdersListComponent implements OnInit {
       this.orderFilter.sortBy = params['sortBy'];
     }
     if (params['pageSize']) {
-      this.orderFilter.pageSize = Number(params['pageSize']) || 10;
+      this.orderFilter.pageSize = Number(params['pageSize']) || 5;
     }
     if (params['page']) {
       const page = Number(params['page']) || 1;
-      this.displayedCount = page * (this.orderFilter.pageSize || 10);
+      this.displayedCount = page * (this.orderFilter.pageSize || 5);
     }
   }
 
@@ -1789,7 +1942,7 @@ export class OrdersListComponent implements OnInit {
     if (this.orderFilter.sortBy && this.orderFilter.sortBy !== 'createdAt_desc') {
       queryParams['sortBy'] = this.orderFilter.sortBy;
     }
-    const currentPage = Math.ceil(this.displayedCount / (this.orderFilter.pageSize || 10));
+    const currentPage = Math.ceil(this.displayedCount / (this.orderFilter.pageSize || 5));
     if (currentPage > 1) {
       queryParams['page'] = currentPage;
     }
@@ -1919,14 +2072,23 @@ export class OrdersListComponent implements OnInit {
         this.paginatedOrders = [];
         return;
       }
-      this.orderService.getMyOrders().subscribe({
-        next: (orders) => {
-          this.allOrders = orders || [];
+      // Server-side pagination bilan buyurtmalarni olish
+      this.orderService.getMyOrdersPaged(this.currentPage, this.pageSize).subscribe({
+        next: (pagedResult) => {
+          this.allOrders = pagedResult.items || [];
           this.orders = this.allOrders;
+          this.paginatedOrders = this.allOrders;
+          this.filteredOrders = this.allOrders;
+
+          // Pagination state'ni yangilash
+          this.totalItems = pagedResult.totalCount || 0;
+          this.totalPages = pagedResult.totalPages || 1;
+          this.hasPreviousPage = pagedResult.hasPreviousPage || false;
+          this.hasNextPage = pagedResult.hasNextPage || false;
+
           this.isLoading = false;
           this.statusCounts = this.orderService.computeStatusCounts(this.allOrders);
           this.computeCustomerAvailableBranches();
-          this.applyFilters(false);
           this.loadPaymentsForOrders();
         },
         error: (err) => {
@@ -1937,6 +2099,10 @@ export class OrdersListComponent implements OnInit {
           this.orders = [];
           this.filteredOrders = [];
           this.paginatedOrders = [];
+          this.totalItems = 0;
+          this.totalPages = 0;
+          this.hasPreviousPage = false;
+          this.hasNextPage = false;
           this.statusCounts = { all: 0, pending: 0, confirmed: 0, shipped: 0, delivered: 0, cancelled: 0 };
           if (err?.status === 403) {
             this.errorMessage = 'Buyurtmalarni ko\'rish uchun ruxsat yo\'q.';
@@ -2018,7 +2184,7 @@ export class OrdersListComponent implements OnInit {
 
     this.filteredOrders = pagedResult.items;
 
-    const pageSize = this.orderFilter.pageSize || 10;
+    const pageSize = this.orderFilter.pageSize || 5;
     this.totalPages = Math.ceil(this.filteredOrders.length / pageSize) || 1;
 
     // Slice for client-side pagination (load more)
@@ -2031,13 +2197,13 @@ export class OrdersListComponent implements OnInit {
 
   onStatusChipSelected(status: OrderStatus | null): void {
     this.orderFilter.status = status;
-    this.displayedCount = this.orderFilter.pageSize || 10;
+    this.displayedCount = this.orderFilter.pageSize || 5;
     this.applyFilters(true);
   }
 
   onFilterChanged(updatedFilter: OrderFilter): void {
     this.orderFilter = { ...updatedFilter };
-    this.displayedCount = this.orderFilter.pageSize || 10;
+    this.displayedCount = this.orderFilter.pageSize || 5;
     this.applyFilters(true);
   }
 
@@ -2052,16 +2218,53 @@ export class OrdersListComponent implements OnInit {
       paymentStatus: 'all',
       sortBy: 'createdAt_desc',
       pageNumber: 1,
-      pageSize: 10
+      pageSize: 5
     };
-    this.displayedCount = 10;
+    this.displayedCount = 5;
+    this.currentPage = 1;
     this.applyFilters(true);
   }
 
   loadMore(): void {
-    const pageSize = this.orderFilter.pageSize || 10;
+    const pageSize = this.orderFilter.pageSize || 5;
     this.displayedCount += pageSize;
     this.applyFilters(true);
+  }
+
+  // Server-side pagination metodlari
+  goToPage(page: number): void {
+    if (page < 1 || page > this.totalPages || page === this.currentPage) return;
+    this.currentPage = page;
+    this.loadOrders();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  nextPage(): void {
+    if (this.hasNextPage) {
+      this.goToPage(this.currentPage + 1);
+    }
+  }
+
+  prevPage(): void {
+    if (this.hasPreviousPage) {
+      this.goToPage(this.currentPage - 1);
+    }
+  }
+
+  onPageSizeChange(newSize: number): void {
+    this.pageSize = Math.min(newSize, 50);
+    this.currentPage = 1;
+    this.loadOrders();
+  }
+
+  get visiblePages(): number[] {
+    const pages: number[] = [];
+    const start = Math.max(1, this.currentPage - 2);
+    const end = Math.min(this.totalPages, this.currentPage + 2);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
   }
 
   goToProducts(): void {

@@ -1367,7 +1367,7 @@ export class AdminPaymentsListComponent implements OnInit, OnDestroy {
     this.paymentService.getPayments(filter).subscribe({
       next: (result) => {
         this.payments = result.items;
-        this.totalItems = result.total;
+        this.totalItems = result.total || result.totalCount || 0;
         this.totalPages = result.totalPages;
         this.currentPage = result.pageNumber;
         this.isLoading = false;

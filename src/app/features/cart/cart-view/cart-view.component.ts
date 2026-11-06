@@ -4,11 +4,14 @@ import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Cart, CartItem } from '../../../core/models/cart.model';
 import { Product } from '../../../core/models/product.model';
+import { CompanyBranch } from '../../../core/models/company-branch.model';
 import { CartService } from '../../../core/services/cart.service';
 import { ProductService } from '../../../core/services/product.service';
 import { OrderService } from '../../../core/services/order.service';
+import { CompanyService } from '../../../core/services/company.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
+import { TelegramService } from '../../../core/services/telegram.service';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { LocationPickerComponent, SelectedLocation } from '../../../shared/components/location-picker/location-picker.component';
@@ -171,9 +174,28 @@ interface EnrichedCartItem extends CartItem {
 
             <!-- Checkout Branch Info -->
             <div class="checkout-form-box">
-              <div class="branch-auto-notice">
+              <div class="branch-auto-notice" (click)="toggleBranchDetails()">
                 <span class="notice-icon">🏢</span>
-                <p class="notice-text">Buyurtma mahsulot joylashgan filialga avtomatik yuboriladi.</p>
+                <p class="notice-text">
+                  Buyurtma mahsulot joylashgan filialga avtomatik yuboriladi.
+                </p>
+                <span class="branch-toggle-hint" *ngIf="cartBranches.length > 0">
+                  {{ showBranchDetails ? '▲ Yopish' : '▼ Manzilni korish' }}
+                </span>
+              </div>
+
+              <!-- Filial tafsilotlari -->
+              <div class="branch-details-list" *ngIf="showBranchDetails && cartBranches.length > 0">
+                <div class="branch-detail-item" *ngFor="let branch of cartBranches" (click)="openBranchOnMap(branch)">
+                  <div class="branch-info">
+                    <span class="branch-name">📍 {{ branch.name }}</span>
+                    <span class="branch-address">{{ branch.address }}</span>
+                    <span class="branch-phone" *ngIf="branch.phoneNumber">📞 {{ branch.phoneNumber }}</span>
+                  </div>
+                  <span class="branch-map-btn" *ngIf="branch.latitude && branch.longitude">
+                    🗺️ Xaritada
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -659,6 +681,16 @@ interface EnrichedCartItem extends CartItem {
       font-size: 0.875rem;
       color: #166534;
       line-height: 1.4;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .branch-auto-notice:hover {
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+    .branch-auto-notice:active {
+      transform: scale(0.98);
     }
     .branch-auto-notice .notice-icon {
       font-size: 1.2rem;
@@ -667,12 +699,102 @@ interface EnrichedCartItem extends CartItem {
     .branch-auto-notice .notice-text {
       margin: 0;
       font-weight: 500;
+      flex: 1;
+    }
+    .branch-toggle-hint {
+      display: block;
+      font-size: 0.75rem;
+      color: #15803d;
+      margin-top: 0.25rem;
+      font-weight: 600;
+    }
+    .branch-details-list {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .branch-detail-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .branch-detail-item:hover {
+      border-color: #6366f1;
+      background: #f5f3ff;
+    }
+    .branch-detail-item:active {
+      transform: scale(0.98);
+    }
+    .branch-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .branch-name {
+      font-weight: 600;
+      color: #1e293b;
+      font-size: 0.875rem;
+    }
+    .branch-address {
+      font-size: 0.8125rem;
+      color: #64748b;
+    }
+    .branch-phone {
+      font-size: 0.75rem;
+      color: #6366f1;
+    }
+    .branch-map-btn {
+      padding: 0.375rem 0.625rem;
+      background: #eef2ff;
+      color: #6366f1;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
     }
     :host-context(body.dark-theme) .branch-auto-notice,
     :host-context(.dark-theme) .branch-auto-notice {
       background: rgba(34, 197, 94, 0.1);
       border-color: rgba(34, 197, 94, 0.2);
       color: #86efac;
+    }
+    :host-context(body.dark-theme) .branch-auto-notice:hover,
+    :host-context(.dark-theme) .branch-auto-notice:hover {
+      background: rgba(34, 197, 94, 0.15);
+    }
+    :host-context(body.dark-theme) .branch-toggle-hint,
+    :host-context(.dark-theme) .branch-toggle-hint {
+      color: #4ade80;
+    }
+    :host-context(body.dark-theme) .branch-detail-item,
+    :host-context(.dark-theme) .branch-detail-item {
+      background: #1e293b;
+      border-color: #334155;
+    }
+    :host-context(body.dark-theme) .branch-detail-item:hover,
+    :host-context(.dark-theme) .branch-detail-item:hover {
+      background: #312e81;
+      border-color: #6366f1;
+    }
+    :host-context(body.dark-theme) .branch-name,
+    :host-context(.dark-theme) .branch-name {
+      color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .branch-address,
+    :host-context(.dark-theme) .branch-address {
+      color: #94a3b8;
+    }
+    :host-context(body.dark-theme) .branch-map-btn,
+    :host-context(.dark-theme) .branch-map-btn {
+      background: #312e81;
     }
     .checkout-btn {
       width: 100%;
@@ -833,8 +955,10 @@ export class CartViewComponent implements OnInit {
   private cartService = inject(CartService);
   private productService = inject(ProductService);
   private orderService = inject(OrderService);
+  private companyService = inject(CompanyService);
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
+  private tg = inject(TelegramService);
   private router = inject(Router);
 
   rawCart: Cart | null = null;
@@ -844,6 +968,10 @@ export class CartViewComponent implements OnInit {
   updatingProductId: number | null = null;
   isPlacingOrder = false;
   showSuccessModal = false;
+
+  // Filial ma'lumotlari
+  cartBranches: CompanyBranch[] = [];
+  showBranchDetails = false;
 
   // Location picker state
   showLocationPicker = false;
@@ -889,12 +1017,53 @@ export class CartViewComponent implements OnInit {
           product: productMap.get(item.productId)
         }));
         this.isLoading = false;
+        this.loadBranchInfo();
       },
       error: () => {
         this.enrichedItems = items.map(item => ({ ...item }));
         this.isLoading = false;
       }
     });
+  }
+
+  private loadBranchInfo(): void {
+    // Unikal filial ID larini olish
+    const branchIds = new Set<number>();
+    this.enrichedItems.forEach(item => {
+      if (item.product?.companyBranchId) {
+        branchIds.add(item.product.companyBranchId);
+      }
+    });
+
+    if (branchIds.size === 0) return;
+
+    // Har bir filial uchun ma'lumot olish (xato bo'lsa yashirin o'tkazamiz)
+    this.cartBranches = [];
+    branchIds.forEach(branchId => {
+      this.companyService.getBranchById(branchId).subscribe({
+        next: (branch) => {
+          if (branch && !this.cartBranches.find(b => b.id === branch.id)) {
+            this.cartBranches.push(branch);
+          }
+        },
+        error: () => {
+          // 403 yoki boshqa xato - yashirin o'tkazamiz
+          // Filial ma'lumoti yuklanmasa ham savat ishlayveradi
+        }
+      });
+    });
+  }
+
+  toggleBranchDetails(): void {
+    this.tg.hapticImpact('light');
+    this.showBranchDetails = !this.showBranchDetails;
+  }
+
+  openBranchOnMap(branch: CompanyBranch): void {
+    this.tg.hapticImpact('light');
+    if (branch.latitude && branch.longitude) {
+      this.router.navigate(['/map'], { queryParams: { branch: branch.id } });
+    }
   }
 
   get totalItemsCount(): number {

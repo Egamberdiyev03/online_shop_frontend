@@ -22,3 +22,12 @@ export interface UpdateCommentDto {
   starRating: number;
 }
 
+export interface PagedCommentResult {
+  items: Comment[];
+  totalCount: number;
+  pageNumber: number;
+  pageSize: number;
+  totalPages: number;
+  hasNextPage: boolean;
+}
+

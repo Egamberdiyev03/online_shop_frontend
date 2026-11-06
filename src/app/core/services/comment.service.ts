@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Comment, CreateCommentDto, UpdateCommentDto } from '../models/comment.model';
+import { Comment, CreateCommentDto, UpdateCommentDto, PagedCommentResult } from '../models/comment.model';
 import { ResponseModel, unwrapResult } from '../models/response.model';
 
 @Injectable({
@@ -62,6 +62,18 @@ export class CommentService {
       map(res => {
         const val = unwrapResult(res);
         return typeof val === 'number' ? val : 0;
+      })
+    );
+  }
+
+  /**
+   * Joriy foydalanuvchining sharhlari (pagination bilan)
+   */
+  getMy(pageNumber = 1, pageSize = 10): Observable<PagedCommentResult> {
+    return this.http.get<ResponseModel<PagedCommentResult>>(`${this.apiUrl}/GetMy?pageNumber=${pageNumber}&pageSize=${pageSize}`).pipe(
+      map(res => {
+        const data = unwrapResult(res);
+        return data || { items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0, hasNextPage: false };
       })
     );
   }

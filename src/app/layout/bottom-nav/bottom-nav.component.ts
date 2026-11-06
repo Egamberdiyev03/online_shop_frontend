@@ -51,7 +51,15 @@ import { TelegramService } from '../../core/services/telegram.service';
         <span class="nav-label">Admin</span>
       </a>
 
-      <a routerLink="/profile" routerLinkActive="active" class="nav-item" (click)="onNavClick()" *ngIf="authState.isAuthenticated()">
+      <a
+        routerLink="/profile"
+        routerLinkActive="active"
+        #profileLink="routerLinkActive"
+        [attr.aria-current]="profileLink.isActive ? 'page' : null"
+        class="nav-item"
+        (click)="onNavClick()"
+        *ngIf="authState.isAuthenticated()"
+      >
         <span class="nav-icon">👤</span>
         <span class="nav-label">Profil</span>
       </a>

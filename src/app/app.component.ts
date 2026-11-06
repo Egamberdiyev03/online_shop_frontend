@@ -8,6 +8,7 @@ import { BottomNavComponent } from './layout/bottom-nav/bottom-nav.component';
 import { AuthService } from './core/services/auth.service';
 import { AuthStateService } from './core/services/auth-state.service';
 import { TelegramService } from './core/services/telegram.service';
+import { BackButtonService } from './core/services/back-button.service';
 
 @Component({
   selector: 'app-root',
@@ -22,6 +23,7 @@ export class AppComponent implements OnInit {
   private authService = inject(AuthService);
   private authState = inject(AuthStateService);
   tg = inject(TelegramService);
+  private backButton = inject(BackButtonService); // Telegram BackButton boshqaruvi
 
   ngOnInit(): void {
     try {

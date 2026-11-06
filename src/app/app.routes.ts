@@ -70,6 +70,21 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   {
+    path: 'profile/comments',
+    loadComponent: () => import('./features/profile/my-comments/my-comments.component').then(m => m.MyCommentsComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'profile/settings',
+    loadComponent: () => import('./features/profile/profile-settings/profile-settings.component').then(m => m.ProfileSettingsComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'notifications',
+    loadComponent: () => import('./features/notifications/notifications-list.component').then(m => m.NotificationsListComponent),
+    canActivate: [authGuard]
+  },
+  {
     path: 'payments',
     loadComponent: () => import('./features/payments/customer-payments-list/customer-payments-list.component').then(m => m.CustomerPaymentsListComponent),
     canActivate: [authGuard]

@@ -222,15 +222,28 @@ export class TelegramService {
   }
 
   // Back Button
+  private backButtonCallback: (() => void) | null = null;
+
   showBackButton(callback: () => void): void {
     if (this.tg?.BackButton) {
+      // Avvalgi callback'ni tozalash
+      if (this.backButtonCallback) {
+        this.tg.BackButton.offClick(this.backButtonCallback);
+      }
+      this.backButtonCallback = callback;
       this.tg.BackButton.onClick(callback);
       this.tg.BackButton.show();
     }
   }
 
   hideBackButton(): void {
-    this.tg?.BackButton?.hide();
+    if (this.tg?.BackButton) {
+      if (this.backButtonCallback) {
+        this.tg.BackButton.offClick(this.backButtonCallback);
+        this.backButtonCallback = null;
+      }
+      this.tg.BackButton.hide();
+    }
   }
 
   // Main Button
@@ -287,6 +300,15 @@ export class TelegramService {
     }
   }
 
+  // Telegram havolasini ochish (t.me/...)
+  openTelegramLink(url: string): void {
+    if (this.tg) {
+      this.tg.openTelegramLink(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  }
+
   // Close app
   close(): void {
     this.tg?.close();
@@ -300,5 +322,18 @@ export class TelegramService {
   // Get raw Telegram WebApp object
   get webApp(): TelegramWebApp | null {
     return this.tg;
+  }
+
+  // Telegram foydalanuvchi ma'lumotlari
+  get telegramUser(): { id?: number; firstName?: string; lastName?: string; username?: string; photoUrl?: string } | null {
+    const user = this.tg?.initDataUnsafe?.user;
+    if (!user) return null;
+    return {
+      id: user.id,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      username: user.username,
+      photoUrl: user.photo_url
+    };
   }
 }

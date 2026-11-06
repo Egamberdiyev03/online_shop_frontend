@@ -1,517 +1,739 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CustomerService } from '../../core/services/customer.service';
-import { CompanyService } from '../../core/services/company.service';
 import { AuthStateService } from '../../core/services/auth-state.service';
 import { NotificationService } from '../../core/services/notification.service';
-import { Customer, UpdateCustomerDto } from '../../core/models/customer.model';
-import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
+import { TelegramService } from '../../core/services/telegram.service';
+import { Customer } from '../../core/models/customer.model';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, RouterModule, ReactiveFormsModule, LoadingSpinnerComponent],
+  imports: [CommonModule, RouterModule],
   template: `
-    <div class="page-container">
-      <div class="page-header">
-        <div>
-          <h1 class="page-title">{{ pageTitle }}</h1>
-          <p class="page-subtitle">{{ pageSubtitle }}</p>
+    <div class="profile-page">
+      <!-- Header with gradient -->
+      <header class="profile-header">
+        <div class="header-top-row">
+          <h1 class="header-title">Profil</h1>
+          <button
+            class="settings-btn"
+            (click)="openSettings()"
+            aria-label="Sozlamalar"
+          >
+            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
         </div>
 
-        <div class="header-btns">
-          <!-- Mijoz uchun buyurtmalar tugmasi -->
-          <button class="btn btn-secondary" (click)="goToOrders()" *ngIf="authState.isCustomer()">
-            🛍️ Mening Buyurtmalarim
-          </button>
-          <!-- CompanyAdmin uchun kompaniya sahifasiga havola -->
-          <a
-            class="btn btn-primary"
-            *ngIf="authState.isCompanyAdmin() && authState.userCompanyId()"
-            [routerLink]="['/companies', authState.userCompanyId()]"
-          >
-            🏢 Mening Kompaniyam
-          </a>
-          <!-- BranchManager uchun filial sahifasiga havola -->
-          <a
-            class="btn btn-primary"
-            *ngIf="authState.isBranchManager() && authState.userBranchId()"
-            [routerLink]="['/branches', authState.userBranchId()]"
-          >
-            🏪 Mening Filialim
-          </a>
-          <!-- SuperAdmin uchun boshqaruv paneli -->
-          <a class="btn btn-primary" routerLink="/admin" *ngIf="authState.isSuperAdmin()">
-            ⚙️ Boshqaruv Paneli
-          </a>
+        <div class="user-info-row">
+          <!-- Avatar -->
+          <div class="avatar-wrapper">
+            <img
+              *ngIf="avatarUrl"
+              [src]="avatarUrl"
+              [alt]="displayName"
+              class="avatar-img"
+              (error)="avatarUrl = ''"
+            />
+            <span *ngIf="!avatarUrl" class="avatar-initials">{{ initials }}</span>
+          </div>
+
+          <!-- Name & Phone -->
+          <div class="user-details">
+            <h2 class="user-name">{{ displayName }}</h2>
+            <p class="user-phone" *ngIf="phoneNumber">{{ phoneNumber }}</p>
+          </div>
+        </div>
+      </header>
+
+      <!-- Loading Skeleton -->
+      <div class="skeleton-container" *ngIf="isLoading">
+        <div class="skeleton-card">
+          <div class="skeleton-row" *ngFor="let i of [1,2,3,4]"></div>
+        </div>
+        <div class="skeleton-card">
+          <div class="skeleton-row" *ngFor="let i of [1,2]"></div>
         </div>
       </div>
 
-      <app-loading-spinner *ngIf="isLoading" message="Maʻlumotlar yuklanmoqda..."></app-loading-spinner>
+      <!-- Error State -->
+      <div class="error-state" *ngIf="hasError && !isLoading">
+        <p class="error-text">Ma'lumotlarni yuklashda xatolik</p>
+        <button class="btn btn-primary" (click)="loadProfile()">Qayta urinish</button>
+      </div>
 
-      <div class="profile-card" *ngIf="!isLoading && form">
-        <!-- User Banner Header -->
-        <div class="profile-user-banner" *ngIf="currentCustomer">
-          <div class="avatar-circle">
-            {{ avatarIcon }}
-          </div>
-          <div class="user-meta">
-            <div class="user-name-row">
-              <h2 class="user-display-name">{{ currentCustomer.name }}</h2>
-              <span
-                class="role-badge"
-                [class.company-admin]="authState.isCompanyAdmin()"
-                [class.super-admin]="authState.isSuperAdmin()"
-                [class.branch-manager]="authState.isBranchManager()"
-              >
-                {{ authState.userRole() || 'Mijoz' }}
-              </span>
-            </div>
-            <p class="user-display-email">{{ currentCustomer.email }}</p>
-          </div>
+      <!-- Menu Cards -->
+      <div class="menu-container" *ngIf="!isLoading && !hasError">
+        <!-- Card 1: Asosiy -->
+        <div class="menu-card">
+          <a
+            routerLink="/payments"
+            class="menu-item"
+            (click)="onMenuClick()"
+          >
+            <span class="menu-icon-box icon-payments" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                <line x1="1" y1="10" x2="23" y2="10"/>
+              </svg>
+            </span>
+            <span class="menu-text">To'lovlarim</span>
+            <span class="menu-arrow" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+          </a>
+
+          <div class="menu-divider"></div>
+
+          <button
+            class="menu-item"
+            (click)="openComments()"
+          >
+            <span class="menu-icon-box icon-comments" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </span>
+            <span class="menu-text">Sharhlarim</span>
+            <span class="menu-arrow" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+          </button>
+
+          <div class="menu-divider"></div>
+
+          <a
+            routerLink="/map"
+            class="menu-item"
+            (click)="onMenuClick()"
+          >
+            <span class="menu-icon-box icon-map" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </span>
+            <span class="menu-text">Filiallar joylashuvi</span>
+            <span class="menu-value">Xarita</span>
+            <span class="menu-arrow" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+          </a>
+
+          <div class="menu-divider"></div>
+
+          <button
+            class="menu-item"
+            (click)="openNotifications()"
+          >
+            <span class="menu-icon-box icon-notifications" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+            </span>
+            <span class="menu-text">Bildirishnomalar</span>
+            <span class="menu-arrow" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+          </button>
         </div>
 
-        <form [formGroup]="form" (ngSubmit)="onSubmit()">
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Toʻliq ismingiz *</label>
-              <input type="text" class="form-control" formControlName="name" placeholder="Masalan: Alisher Navoiy" />
-              <div class="form-error" *ngIf="form.get('name')?.touched && form.get('name')?.invalid">
-                Ismni kiritish shart (kamida 2 ta belgi).
-              </div>
-            </div>
+        <!-- Card 2: Sozlamalar -->
+        <div class="menu-card">
+          <button
+            class="menu-item"
+            (click)="toggleTheme()"
+            *ngIf="hasThemeSupport"
+          >
+            <span class="menu-icon-box icon-theme" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/>
+                <line x1="21" y1="12" x2="23" y2="12"/>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            </span>
+            <span class="menu-text">Mavzu</span>
+            <span class="menu-value">{{ currentThemeLabel }}</span>
+            <span class="menu-arrow" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+          </button>
 
-            <div class="form-group">
-              <label class="form-label">Elektron pochta</label>
-              <input type="email" class="form-control" formControlName="email" readonly />
-              <small class="help-text">Email manzilni oʻzgartirib boʻlmaydi.</small>
-            </div>
-          </div>
+          <div class="menu-divider" *ngIf="hasThemeSupport"></div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Telefon raqam</label>
-              <input type="tel" class="form-control" formControlName="phoneNumber" placeholder="+998901234567" />
-            </div>
+          <button
+            class="menu-item"
+            (click)="openHelp()"
+          >
+            <span class="menu-icon-box icon-help" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </span>
+            <span class="menu-text">Yordam va aloqa</span>
+            <span class="menu-arrow" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </span>
+          </button>
+        </div>
 
-            <!-- Yashash manzili faqat Customer uchun ko'rinadi -->
-            <div class="form-group" *ngIf="authState.isCustomer()">
-              <label class="form-label">Yashash manzili</label>
-              <input type="text" class="form-control" formControlName="address" placeholder="Shahar, koʻcha, uy..." />
-            </div>
-
-            <!-- CompanyAdmin uchun kompaniya nomi ko'rinadi -->
-            <div class="form-group" *ngIf="authState.isCompanyAdmin()">
-              <label class="form-label">Kompaniya</label>
-              <input type="text" class="form-control" [value]="companyName" readonly />
-              <small class="help-text">Kompaniya maʻlumotlarini kompaniya sahifasida tahrirlashingiz mumkin.</small>
-            </div>
-
-            <!-- BranchManager uchun filial nomi ko'rinadi -->
-            <div class="form-group" *ngIf="authState.isBranchManager()">
-              <label class="form-label">Filial</label>
-              <input type="text" class="form-control" [value]="branchName" readonly />
-              <small class="help-text">Filial maʻlumotlarini filial sahifasida tahrirlashingiz mumkin.</small>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button type="button" class="btn btn-secondary" (click)="loadProfile()">Bekor qilish</button>
-            <button type="submit" class="btn btn-primary" [disabled]="form.invalid || isSubmitting || !form.dirty">
-              {{ isSubmitting ? 'Saqlanmoqda...' : "Oʻzgarishlarni Saqlash" }}
-            </button>
-          </div>
-
-        </form>
+        <!-- Logout Button -->
+        <button
+          class="logout-btn"
+          (click)="logout()"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Chiqish</span>
+        </button>
       </div>
     </div>
   `,
   styles: [`
-    .page-container {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 2rem 1.25rem 4rem;
+    .profile-page {
+      min-height: 100vh;
+      min-height: 100dvh;
+      background: var(--bg-main, #f8fafc);
+      padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
     }
-    .page-header {
+
+    /* ===== HEADER ===== */
+    .profile-header {
+      background: linear-gradient(160deg, #3F37C9 0%, #5B4EF0 100%);
+      padding: 20px;
+      padding-top: calc(20px + env(safe-area-inset-top, 0px));
+      border-radius: 0 0 28px 28px;
+    }
+
+    .header-top-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2rem;
-      gap: 1rem;
-      flex-wrap: wrap;
+      margin-bottom: 20px;
     }
-    .page-title {
-      font-size: 2rem;
-      font-weight: 800;
-      color: #0f172a;
-      letter-spacing: -0.02em;
-      margin: 0 0 0.35rem;
-    }
-    .page-subtitle {
-      color: #64748b;
-      font-size: 0.925rem;
+
+    .header-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
       margin: 0;
     }
-    .header-btns {
-      display: flex;
-      gap: 0.75rem;
-    }
 
-    /* Profile Card */
-    .profile-card {
-      background: #ffffff;
-      border-radius: 18px;
-      border: 1px solid #e2e8f0;
-      padding: 2.25rem;
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
-    }
-
-    /* User Banner Header */
-    .profile-user-banner {
-      display: flex;
-      align-items: center;
-      gap: 1.25rem;
-      padding-bottom: 1.75rem;
-      margin-bottom: 1.75rem;
-      border-bottom: 1px solid #f1f5f9;
-      flex-wrap: wrap;
-    }
-    .avatar-circle {
-      width: 60px;
-      height: 60px;
-      border-radius: 16px;
-      background: #eef2ff;
-      border: 1px solid #c7d2fe;
+    .settings-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: none;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.85rem;
-      flex-shrink: 0;
+      color: #ffffff;
+      cursor: pointer;
+      transition: background 0.2s;
+      -webkit-tap-highlight-color: transparent;
     }
-    .user-meta {
-      flex: 1;
+
+    .settings-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
     }
-    .user-name-row {
+
+    .settings-btn:active {
+      transform: scale(0.95);
+    }
+
+    .user-info-row {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      margin-bottom: 0.25rem;
-    }
-    .user-display-name {
-      font-size: 1.35rem;
-      font-weight: 800;
-      color: #0f172a;
-      margin: 0;
-    }
-    .role-badge {
-      font-size: 0.72rem;
-      font-weight: 700;
-      color: #4338ca;
-      background: #e0e7ff;
-      padding: 0.2rem 0.65rem;
-      border-radius: 9999px;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-    .role-badge.company-admin {
-      background: #ffedd5;
-      color: #c2410c;
-    }
-    .role-badge.super-admin {
-      background: #fee2e2;
-      color: #b91c1c;
-    }
-    .role-badge.branch-manager {
-      background: #fef3c7;
-      color: #b45309;
-    }
-    .user-display-email {
-      font-size: 0.875rem;
-      color: #64748b;
-      margin: 0;
+      gap: 16px;
     }
 
-    /* Form Layout */
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      margin-bottom: 1.25rem;
-    }
-    @media (max-width: 640px) {
-      .form-row {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-      }
-    }
-    .form-group {
+    .avatar-wrapper {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: #ffffff;
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      border: 3px solid rgba(255, 255, 255, 0.3);
     }
-    .form-label {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #334155;
-      margin-bottom: 0.45rem;
-    }
-    .form-control {
+
+    .avatar-img {
       width: 100%;
-      padding: 0.65rem 0.85rem;
-      font-size: 0.9rem;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      outline: none;
-      transition: all 0.2s;
-    }
-    .form-control:focus {
-      border-color: #4f46e5;
-      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
-    }
-    input[readonly] {
-      background-color: #f8fafc;
-      cursor: not-allowed;
-      color: #64748b;
-    }
-    .help-text {
-      display: block;
-      margin-top: 0.35rem;
-      font-size: 0.775rem;
-      color: #94a3b8;
-    }
-    .form-error {
-      color: #ef4444;
-      font-size: 0.75rem;
-      margin-top: 0.35rem;
-    }
-    .form-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 1rem;
-      margin-top: 1.75rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid #f1f5f9;
+      height: 100%;
+      object-fit: cover;
     }
 
-    /* ========================================================
-       DARK THEME STYLES (TUNGI REJIM)
-       ======================================================== */
-    :host-context(body.dark-theme) .page-title,
-    :host-context(.dark-theme) .page-title {
-      color: #f8fafc;
+    .avatar-initials {
+      font-size: 24px;
+      font-weight: 700;
+      color: #3F37C9;
+      text-transform: uppercase;
     }
-    :host-context(body.dark-theme) .page-subtitle,
-    :host-context(.dark-theme) .page-subtitle {
-      color: #94a3b8;
+
+    .user-details {
+      flex: 1;
+      min-width: 0;
     }
-    :host-context(body.dark-theme) .profile-card,
-    :host-context(.dark-theme) .profile-card {
-      background: #151e32 !important;
-      border-color: #22304d !important;
+
+    .user-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      margin: 0 0 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    :host-context(body.dark-theme) .profile-user-banner,
-    :host-context(.dark-theme) .profile-user-banner {
-      border-bottom-color: #22304d;
+
+    .user-phone {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.8);
+      margin: 0;
     }
-    :host-context(body.dark-theme) .avatar-circle,
-    :host-context(.dark-theme) .avatar-circle {
+
+    /* ===== SKELETON ===== */
+    .skeleton-container {
+      padding: 16px;
+    }
+
+    .skeleton-card {
+      background: var(--bg-card, #ffffff);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 20px;
+      padding: 8px 0;
+      margin-bottom: 12px;
+    }
+
+    .skeleton-row {
+      height: 56px;
+      margin: 0 16px;
+      background: linear-gradient(90deg, var(--bg-subtle, #f1f5f9) 25%, var(--bg-card, #ffffff) 50%, var(--bg-subtle, #f1f5f9) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 8px;
+    }
+
+    .skeleton-row + .skeleton-row {
+      margin-top: 8px;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ===== ERROR STATE ===== */
+    .error-state {
+      padding: 48px 24px;
+      text-align: center;
+    }
+
+    .error-text {
+      color: var(--text-muted, #64748b);
+      margin-bottom: 16px;
+    }
+
+    /* ===== MENU CONTAINER ===== */
+    .menu-container {
+      padding: 16px;
+    }
+
+    .menu-card {
+      background: var(--bg-card, #ffffff);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 20px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-height: 56px;
+      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      text-decoration: none;
+      color: var(--text-main, #0f172a);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      gap: 12px;
+    }
+
+    .menu-item:hover {
+      background: var(--bg-subtle, #f1f5f9);
+    }
+
+    .menu-item:active {
+      background: var(--border, #e2e8f0);
+    }
+
+    .menu-icon-box {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .icon-payments {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+    }
+
+    .icon-comments {
+      background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+      color: #ffffff;
+    }
+
+    .icon-map {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: #ffffff;
+    }
+
+    .icon-notifications {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: #ffffff;
+    }
+
+    .icon-theme {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: #ffffff;
+    }
+
+    .icon-help {
+      background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+      color: #ffffff;
+    }
+
+    .menu-text {
+      flex: 1;
+      text-align: left;
+    }
+
+    .menu-value {
+      color: var(--text-muted, #64748b);
+      font-size: 14px;
+      font-weight: 400;
+    }
+
+    .menu-arrow {
+      color: var(--text-light, #94a3b8);
+      display: flex;
+      align-items: center;
+    }
+
+    .menu-divider {
+      height: 1px;
+      background: var(--border, #e2e8f0);
+      margin: 0 16px;
+    }
+
+    /* ===== LOGOUT BUTTON ===== */
+    .logout-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      height: 52px;
+      background: transparent;
+      border: 1px solid #FF9AA8;
+      border-radius: 16px;
+      color: #FF9AA8;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 8px;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .logout-btn:hover {
+      background: rgba(255, 154, 168, 0.1);
+    }
+
+    .logout-btn:active {
+      transform: scale(0.98);
+      background: rgba(255, 154, 168, 0.15);
+    }
+
+    /* ===== DARK THEME ===== */
+    :host-context(body.dark-theme) .profile-page,
+    :host-context(.dark-theme) .profile-page {
+      background: var(--bg-main, #0b0f19);
+    }
+
+    :host-context(body.dark-theme) .profile-header,
+    :host-context(.dark-theme) .profile-header {
+      background: linear-gradient(160deg, #2D2799 0%, #4338CA 100%);
+    }
+
+    :host-context(body.dark-theme) .avatar-wrapper,
+    :host-context(.dark-theme) .avatar-wrapper {
       background: #1e1b4b;
-      border-color: #3730a3;
+      border-color: rgba(255, 255, 255, 0.2);
     }
-    :host-context(body.dark-theme) .user-display-name,
-    :host-context(.dark-theme) .user-display-name {
-      color: #f8fafc;
+
+    :host-context(body.dark-theme) .avatar-initials,
+    :host-context(.dark-theme) .avatar-initials {
+      color: #a5b4fc;
     }
-    :host-context(body.dark-theme) .user-display-email,
-    :host-context(.dark-theme) .user-display-email {
-      color: #94a3b8;
+
+    :host-context(body.dark-theme) .menu-card,
+    :host-context(.dark-theme) .menu-card {
+      background: var(--bg-card, #151e32);
+      border-color: var(--border, #232B45);
     }
-    :host-context(body.dark-theme) .form-label,
-    :host-context(.dark-theme) .form-label {
-      color: #e2e8f0;
+
+    :host-context(body.dark-theme) .menu-item,
+    :host-context(.dark-theme) .menu-item {
+      color: var(--text-main, #f8fafc);
     }
-    :host-context(body.dark-theme) .form-control,
-    :host-context(.dark-theme) .form-control {
-      background: #0b0f19;
-      border-color: #334155;
-      color: #f8fafc;
+
+    :host-context(body.dark-theme) .menu-item:hover,
+    :host-context(.dark-theme) .menu-item:hover {
+      background: var(--bg-subtle, #1e293b);
     }
-    :host-context(body.dark-theme) input[readonly],
-    :host-context(.dark-theme) input[readonly] {
-      background-color: #0b0f19 !important;
-      border-color: #334155 !important;
-      color: #94a3b8 !important;
+
+    :host-context(body.dark-theme) .menu-item:active,
+    :host-context(.dark-theme) .menu-item:active {
+      background: var(--border, #334155);
     }
-    :host-context(body.dark-theme) .help-text,
-    :host-context(.dark-theme) .help-text {
-      color: #94a3b8;
+
+    :host-context(body.dark-theme) .menu-value,
+    :host-context(.dark-theme) .menu-value {
+      color: var(--text-muted, #94a3b8);
     }
-    :host-context(body.dark-theme) .form-actions,
-    :host-context(.dark-theme) .form-actions {
-      border-top-color: #22304d;
+
+    :host-context(body.dark-theme) .menu-arrow,
+    :host-context(.dark-theme) .menu-arrow {
+      color: var(--text-light, #64748b);
+    }
+
+    :host-context(body.dark-theme) .menu-divider,
+    :host-context(.dark-theme) .menu-divider {
+      background: var(--border, #232B45);
+    }
+
+    :host-context(body.dark-theme) .skeleton-card,
+    :host-context(.dark-theme) .skeleton-card {
+      background: var(--bg-card, #151e32);
+      border-color: var(--border, #232B45);
+    }
+
+    :host-context(body.dark-theme) .skeleton-row,
+    :host-context(.dark-theme) .skeleton-row {
+      background: linear-gradient(90deg, #1e293b 25%, #151e32 50%, #1e293b 75%);
+      background-size: 200% 100%;
+    }
+
+    :host-context(body.dark-theme) .logout-btn,
+    :host-context(.dark-theme) .logout-btn {
+      border-color: #FF6B7A;
+      color: #FF6B7A;
+    }
+
+    :host-context(body.dark-theme) .logout-btn:hover,
+    :host-context(.dark-theme) .logout-btn:hover {
+      background: rgba(255, 107, 122, 0.1);
     }
   `]
 })
-export class ProfileComponent implements OnInit {
+export class ProfileComponent implements OnInit, OnDestroy {
   private customerService = inject(CustomerService);
-  private companyService = inject(CompanyService);
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
-  private fb = inject(FormBuilder);
+  private tg = inject(TelegramService);
   private router = inject(Router);
 
-  form!: FormGroup;
-  isLoading = true;
-  isSubmitting = false;
   currentCustomer: Customer | null = null;
-  companyName = '';
-  branchName = ''; // BranchManager uchun filial nomi
+  isLoading = true;
+  hasError = false;
+  avatarUrl = '';
 
-  get avatarIcon(): string {
-    if (this.authState.isSuperAdmin()) return '⚡';
-    if (this.authState.isCompanyAdmin()) return '🏢';
-    if (this.authState.isBranchManager()) return '🏪';
-    return '👤';
-  }
+  // Theme support - Telegram Mini App'da mavjud
+  hasThemeSupport = true;
+  currentTheme: 'auto' | 'light' | 'dark' = 'auto';
 
-  get pageTitle(): string {
-    if (this.authState.isSuperAdmin()) return 'Super Admin Profili';
-    if (this.authState.isCompanyAdmin()) return 'Kompaniya Profili';
-    if (this.authState.isBranchManager()) return 'Filial Menejer Profili';
-    return 'Mijoz Kabineti';
-  }
-
-  get pageSubtitle(): string {
-    if (this.authState.isSuperAdmin()) {
-      return 'Super admin profil sozlamalari';
-    }
-    if (this.authState.isCompanyAdmin()) {
-      return 'Kompaniya administratori maʻlumotlari va sozlamalari';
-    }
-    if (this.authState.isBranchManager()) {
-      return 'Filial boshqaruvchisi maʻlumotlari va sozlamalari';
-    }
-    return 'Shaxsiy maʻlumotlaringiz va profil sozlamalarini boshqaring';
-  }
+  private backButtonCallback?: () => void;
 
   ngOnInit(): void {
-    this.initForm();
     this.loadProfile();
-    this.loadCompanyName();
-    this.loadBranchName();
+    this.loadTelegramUserPhoto();
+    this.checkThemeSupport();
   }
 
-  private loadCompanyName(): void {
-    if (this.authState.isCompanyAdmin()) {
-      const companyId = this.authState.userCompanyId();
-      console.log('[Profile] CompanyAdmin detected, companyId from token:', companyId);
-
-      if (companyId) {
-        this.companyService.getCompanyById(companyId).subscribe({
-          next: (company) => {
-            console.log('[Profile] Company loaded:', company);
-            this.companyName = company?.name || 'Noma\'lum kompaniya';
-          },
-          error: (err) => {
-            console.error('[Profile] Error loading company:', err);
-            this.companyName = 'Noma\'lum kompaniya';
-          }
-        });
-      } else {
-        console.warn('[Profile] CompanyId is NULL! User needs to be assigned via /User/AssignCompanyAdmin API');
-        this.companyName = 'Kompaniya tayinlanmagan';
-      }
+  ngOnDestroy(): void {
+    if (this.backButtonCallback) {
+      this.tg.hideBackButton();
     }
   }
 
-  private loadBranchName(): void {
-    if (this.authState.isBranchManager()) {
-      const branchId = this.authState.userBranchId();
-      console.log('[Profile] BranchManager detected, branchId from token:', branchId);
-
-      if (branchId) {
-        this.companyService.getBranchById(branchId).subscribe({
-          next: (branch) => {
-            console.log('[Profile] Branch loaded:', branch);
-            this.branchName = branch?.name || 'Noma\'lum filial';
-          },
-          error: (err) => {
-            console.error('[Profile] Error loading branch:', err);
-            this.branchName = 'Noma\'lum filial';
-          }
-        });
-      } else {
-        console.warn('[Profile] BranchId is NULL! User needs to be assigned via /User/AssignBranchManager API');
-        this.branchName = 'Filial tayinlanmagan';
-      }
+  private loadTelegramUserPhoto(): void {
+    const tgUser = this.tg.telegramUser;
+    if (tgUser?.photoUrl) {
+      this.avatarUrl = tgUser.photoUrl;
     }
   }
 
-  private initForm(): void {
-    // Address faqat Customer uchun majburiy
-    const addressValidators = this.authState.isCustomer() ? [Validators.required] : [];
+  private checkThemeSupport(): void {
+    // Telegram Mini App'da theme avtomatik boshqariladi
+    // Agar brauzerda bo'lsa, foydalanuvchi o'zgartira olmaydi
+    this.hasThemeSupport = this.tg.isMiniApp();
 
-    this.form = this.fb.group({
-      name: ['', [Validators.required, Validators.minLength(2)]],
-      email: [''],
-      phoneNumber: [''],
-      address: ['', addressValidators]
-    });
+    if (document.body.classList.contains('dark-theme')) {
+      this.currentTheme = 'dark';
+    } else {
+      this.currentTheme = 'light';
+    }
   }
 
   loadProfile(): void {
     this.isLoading = true;
+    this.hasError = false;
     const userId = this.authState.currentCustomerId();
-    
+
+    if (!userId) {
+      this.isLoading = false;
+      this.hasError = true;
+      return;
+    }
+
     this.customerService.getById(userId).subscribe({
       next: (customer) => {
         this.currentCustomer = customer;
-        this.form.patchValue({
-          name: customer.name,
-          email: customer.email,
-          phoneNumber: customer.phoneNumber,
-          address: customer.address
-        });
-        this.form.markAsPristine();
         this.isLoading = false;
       },
       error: () => {
         this.isLoading = false;
+        this.hasError = true;
       }
     });
   }
 
-  onSubmit(): void {
-    if (this.form.invalid || !this.currentCustomer) return;
-    this.isSubmitting = true;
-
-    const val = this.form.value;
-    const updateDto: UpdateCustomerDto = {
-      id: this.currentCustomer.id,
-      name: val.name,
-      email: this.currentCustomer.email, 
-      phoneNumber: val.phoneNumber,
-      address: val.address,
-      location: this.currentCustomer.location || ''
-    };
-
-    this.customerService.update(updateDto).subscribe({
-      next: (updated) => {
-        this.isSubmitting = false;
-        this.notification.success("Maʻlumotlaringiz muvaffaqiyatli saqlandi!");
-        this.form.markAsPristine();
-        this.authState.setCustomer(updated);
-      },
-      error: () => {
-        this.isSubmitting = false;
-      }
-    });
+  get displayName(): string {
+    // Telegram user nomi
+    const tgUser = this.tg.telegramUser;
+    if (tgUser?.firstName) {
+      return [tgUser.firstName, tgUser.lastName].filter(Boolean).join(' ');
+    }
+    // Backend dan
+    return this.currentCustomer?.name || this.authState.userName() || 'Foydalanuvchi';
   }
 
-  goToOrders(): void {
-    this.router.navigate(['/orders']);
+  get initials(): string {
+    const name = this.displayName;
+    const parts = name.split(' ').filter(Boolean);
+    if (parts.length >= 2) {
+      return parts[0][0] + parts[1][0];
+    }
+    return name.slice(0, 2);
+  }
+
+  get phoneNumber(): string {
+    return this.currentCustomer?.phoneNumber || '';
+  }
+
+  get currentThemeLabel(): string {
+    if (this.currentTheme === 'auto') return 'Avto';
+    if (this.currentTheme === 'dark') return 'Tun';
+    return 'Kun';
+  }
+
+  onMenuClick(): void {
+    this.tg.hapticImpact('light');
+  }
+
+  openSettings(): void {
+    this.tg.hapticImpact('light');
+    this.router.navigate(['/profile/settings']);
+  }
+
+  openComments(): void {
+    this.tg.hapticImpact('light');
+    this.router.navigate(['/profile/comments']);
+  }
+
+  openNotifications(): void {
+    this.tg.hapticImpact('light');
+    this.router.navigate(['/notifications']);
+  }
+
+  toggleTheme(): void {
+    this.tg.hapticImpact('light');
+
+    // Theme toggle qilish
+    if (this.currentTheme === 'light') {
+      this.currentTheme = 'dark';
+      document.body.classList.add('dark-theme');
+    } else {
+      this.currentTheme = 'light';
+      document.body.classList.remove('dark-theme');
+    }
+  }
+
+  openHelp(): void {
+    this.tg.hapticImpact('light');
+    // Telegram orqali bog'lanish
+    const supportUsername = environment.telegramSupportUsername || 'yourstore_support';
+    const telegramUrl = `https://t.me/${supportUsername}`;
+
+    if (this.tg.isMiniApp()) {
+      this.tg.openTelegramLink(telegramUrl);
+    } else {
+      window.open(telegramUrl, '_blank');
+    }
+  }
+
+  async logout(): Promise<void> {
+    this.tg.hapticImpact('medium');
+
+    const confirmed = await this.tg.showConfirm('Haqiqatan ham tizimdan chiqmoqchimisiz?');
+
+    if (confirmed) {
+      this.tg.hapticNotification('success');
+      this.authState.clearSession();
+      this.router.navigate(['/login']);
+    }
   }
 }

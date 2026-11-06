@@ -1739,6 +1739,20 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
     :host-context(body.dark-theme) .btn-success:hover {
       background: #059669 !important;
     }
+
+    /* Dark Mode - Price/Total Contrast Fix */
+    :host-context(body.dark-theme) .total-amount,
+    :host-context(.dark-theme) .total-amount {
+      color: #a5b4fc !important;
+    }
+    :host-context(body.dark-theme) .amount-side .val,
+    :host-context(.dark-theme) .amount-side .val {
+      color: #a5b4fc !important;
+    }
+    :host-context(body.dark-theme) .total-highlight,
+    :host-context(.dark-theme) .total-highlight {
+      color: #c7d2fe !important;
+    }
   `]
 })
 export class OrdersListComponent implements OnInit {

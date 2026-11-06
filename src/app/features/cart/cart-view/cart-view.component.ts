@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -12,9 +12,11 @@ import { CompanyService } from '../../../core/services/company.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { TelegramService } from '../../../core/services/telegram.service';
+import { MapService } from '../../../core/services/map.service';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { LocationPickerComponent, SelectedLocation } from '../../../shared/components/location-picker/location-picker.component';
+import * as L from 'leaflet';
 
 interface EnrichedCartItem extends CartItem {
   product?: Product;
@@ -186,14 +188,31 @@ interface EnrichedCartItem extends CartItem {
 
               <!-- Filial tafsilotlari -->
               <div class="branch-details-list" *ngIf="showBranchDetails && cartBranches.length > 0">
-                <div class="branch-detail-item" *ngFor="let branch of cartBranches" (click)="openBranchOnMap(branch)">
+                <div
+                  class="branch-detail-item"
+                  *ngFor="let branch of cartBranches"
+                  (click)="openBranchOnMap(branch)"
+                  (keydown.enter)="openBranchOnMap(branch)"
+                  tabindex="0"
+                  role="button"
+                  [attr.aria-label]="'Xaritada ko\\'rish: ' + branch.name"
+                >
                   <div class="branch-info">
                     <span class="branch-name">📍 {{ branch.name }}</span>
                     <span class="branch-address">{{ branch.address }}</span>
-                    <span class="branch-phone" *ngIf="branch.phoneNumber">📞 {{ branch.phoneNumber }}</span>
+                    <a
+                      *ngIf="branch.phoneNumber"
+                      [href]="'tel:' + branch.phoneNumber"
+                      class="branch-phone"
+                      (click)="$event.stopPropagation()"
+                      (keydown.enter)="$event.stopPropagation()"
+                    >📞 {{ branch.phoneNumber }}</a>
                   </div>
                   <span class="branch-map-btn" *ngIf="branch.latitude && branch.longitude">
                     🗺️ Xaritada
+                  </span>
+                  <span class="branch-map-btn branch-map-fallback" *ngIf="!branch.latitude || !branch.longitude">
+                    🔗 Ochish
                   </span>
                 </div>
               </div>
@@ -272,6 +291,35 @@ interface EnrichedCartItem extends CartItem {
             (locationSelected)="onLocationSelected($event)"
             (cancelled)="closeLocationPicker()"
           ></app-location-picker>
+        </div>
+      </div>
+
+      <!-- Branch Map Modal (faqat ko'rish uchun) -->
+      <div class="modal-overlay" *ngIf="showBranchMapModal" (click)="closeBranchMapModal()">
+        <div class="modal-content branch-map-modal" (click)="$event.stopPropagation()">
+          <div class="branch-map-header">
+            <div class="branch-map-title-row">
+              <span class="branch-map-icon">🏬</span>
+              <div>
+                <h3 class="branch-map-title">{{ viewingBranch?.name }}</h3>
+                <p class="branch-map-address">{{ viewingBranch?.address }}</p>
+              </div>
+            </div>
+            <button class="branch-map-close" (click)="closeBranchMapModal()" aria-label="Yopish">✕</button>
+          </div>
+          <div class="branch-map-container" [id]="branchMapId"></div>
+          <div class="branch-map-footer">
+            <a
+              *ngIf="viewingBranch?.latitude && viewingBranch?.longitude"
+              [href]="getDirectionsUrl(viewingBranch!)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-primary btn-directions"
+            >
+              🧭 Yo'nalish olish
+            </a>
+            <button class="btn btn-secondary" (click)="closeBranchMapModal()">Yopish</button>
+          </div>
         </div>
       </div>
     </div>
@@ -949,9 +997,153 @@ interface EnrichedCartItem extends CartItem {
     .btn-outline-primary:hover {
       background: #eef2ff;
     }
+
+    /* Branch detail item accessibility */
+    .branch-detail-item:focus {
+      outline: 2px solid #4f46e5;
+      outline-offset: 2px;
+    }
+    .branch-phone {
+      color: #6366f1;
+      text-decoration: none;
+    }
+    .branch-phone:hover {
+      text-decoration: underline;
+    }
+    .branch-map-fallback {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    /* Branch Map Modal */
+    .branch-map-modal {
+      max-width: 550px;
+      padding: 0;
+      overflow: hidden;
+    }
+    .branch-map-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 1.25rem 1.25rem 1rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .branch-map-title-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    .branch-map-icon {
+      font-size: 1.75rem;
+    }
+    .branch-map-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0;
+    }
+    .branch-map-address {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin: 0.25rem 0 0;
+    }
+    .branch-map-close {
+      background: #f1f5f9;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #64748b;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .branch-map-close:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .branch-map-container {
+      height: 300px;
+      width: 100%;
+    }
+    .branch-map-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .btn-directions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      text-decoration: none;
+    }
+
+    /* ===== DARK THEME STYLES ===== */
+    :host-context(body.dark-theme) .price-amount,
+    :host-context(.dark-theme) .price-amount {
+      color: #cbd5e1;
+    }
+    :host-context(body.dark-theme) .total-amount,
+    :host-context(.dark-theme) .total-amount {
+      color: #f1f5f9;
+      font-weight: 800;
+    }
+    :host-context(body.dark-theme) .price-currency,
+    :host-context(.dark-theme) .price-currency {
+      color: #94a3b8;
+    }
+    :host-context(body.dark-theme) .total-currency,
+    :host-context(.dark-theme) .total-currency {
+      color: #a5b4fc;
+    }
+    :host-context(body.dark-theme) .sum-amount,
+    :host-context(.dark-theme) .sum-amount {
+      color: #a5b4fc;
+    }
+    :host-context(body.dark-theme) .sum-currency,
+    :host-context(.dark-theme) .sum-currency {
+      color: #c7d2fe;
+    }
+    :host-context(body.dark-theme) .branch-map-modal,
+    :host-context(.dark-theme) .branch-map-modal {
+      background: #1e293b;
+    }
+    :host-context(body.dark-theme) .branch-map-header,
+    :host-context(.dark-theme) .branch-map-header {
+      border-color: #334155;
+    }
+    :host-context(body.dark-theme) .branch-map-title,
+    :host-context(.dark-theme) .branch-map-title {
+      color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .branch-map-address,
+    :host-context(.dark-theme) .branch-map-address {
+      color: #94a3b8;
+    }
+    :host-context(body.dark-theme) .branch-map-close,
+    :host-context(.dark-theme) .branch-map-close {
+      background: #334155;
+      color: #94a3b8;
+    }
+    :host-context(body.dark-theme) .branch-map-close:hover,
+    :host-context(.dark-theme) .branch-map-close:hover {
+      background: #475569;
+      color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .branch-map-footer,
+    :host-context(.dark-theme) .branch-map-footer {
+      background: #0f172a;
+      border-color: #334155;
+    }
   `]
 })
-export class CartViewComponent implements OnInit {
+export class CartViewComponent implements OnInit, OnDestroy {
   private cartService = inject(CartService);
   private productService = inject(ProductService);
   private orderService = inject(OrderService);
@@ -960,6 +1152,7 @@ export class CartViewComponent implements OnInit {
   private notification = inject(NotificationService);
   private tg = inject(TelegramService);
   private router = inject(Router);
+  private mapService = inject(MapService);
 
   rawCart: Cart | null = null;
   enrichedItems: EnrichedCartItem[] = [];
@@ -977,8 +1170,21 @@ export class CartViewComponent implements OnInit {
   showLocationPicker = false;
   deliveryLocation: SelectedLocation | null = null;
 
+  // Branch map modal state
+  showBranchMapModal = false;
+  viewingBranch: CompanyBranch | null = null;
+  branchMapId = 'branch-map-' + Math.random().toString(36).substring(2, 9);
+  private branchMap?: L.Map;
+
   ngOnInit(): void {
     this.loadCart();
+  }
+
+  ngOnDestroy(): void {
+    if (this.branchMap) {
+      this.branchMap.remove();
+      this.branchMap = undefined;
+    }
   }
 
   loadCart(): void {
@@ -1061,9 +1267,50 @@ export class CartViewComponent implements OnInit {
 
   openBranchOnMap(branch: CompanyBranch): void {
     this.tg.hapticImpact('light');
+
+    // Koordinatalar bo'lsa - modal xarita ochish
     if (branch.latitude && branch.longitude) {
-      this.router.navigate(['/map'], { queryParams: { branch: branch.id } });
+      this.viewingBranch = branch;
+      this.showBranchMapModal = true;
+
+      // Xaritani keyingi renderda yaratish
+      setTimeout(() => this.initBranchMap(), 100);
+    } else {
+      // Koordinatalar yo'q - tashqi xaritada manzil bo'yicha qidirish
+      const encodedAddress = encodeURIComponent(branch.address || branch.name);
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank');
     }
+  }
+
+  private initBranchMap(): void {
+    if (!this.viewingBranch?.latitude || !this.viewingBranch?.longitude) return;
+
+    // Oldingi xaritani tozalash
+    if (this.branchMap) {
+      this.branchMap.remove();
+    }
+
+    const location = {
+      latitude: this.viewingBranch.latitude,
+      longitude: this.viewingBranch.longitude
+    };
+
+    this.branchMap = this.mapService.createMap(this.branchMapId, location, 16);
+    this.mapService.addBranchMarker(this.branchMap, this.viewingBranch, false);
+  }
+
+  closeBranchMapModal(): void {
+    this.showBranchMapModal = false;
+    this.viewingBranch = null;
+
+    if (this.branchMap) {
+      this.branchMap.remove();
+      this.branchMap = undefined;
+    }
+  }
+
+  getDirectionsUrl(branch: CompanyBranch): string {
+    return `https://www.google.com/maps/dir/?api=1&destination=${branch.latitude},${branch.longitude}`;
   }
 
   get totalItemsCount(): number {

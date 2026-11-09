@@ -580,7 +580,7 @@ export class CustomerPaymentsListComponent implements OnInit {
     // Load all payments for this customer (PaymentService handles customer scoping automatically)
     this.paymentService.getPayments({
       pageNumber: 1,
-      pageSize: 500,
+      pageSize: 50,
       sortBy: 'createdAt',
       sortDirection: 'desc'
     }).subscribe({

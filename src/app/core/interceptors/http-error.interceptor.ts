@@ -50,11 +50,11 @@ export const httpErrorInterceptor: HttpInterceptorFn = (req, next) => {
         return throwError(() => error);
       }
 
-      // 404 Not Found
+      // 404 Not Found - API uchun xabar chiqarmaymiz (service layer handle qiladi)
+      // Faqat page navigation uchun 404 ko'rsatiladi
       if (error.status === 404) {
-        errorMessage = "So'ralgan ma'lumot topilmadi.";
-        errorTitle = "Topilmadi";
-        notificationService.warning(errorMessage, errorTitle);
+        // API endpoint mavjud emas bo'lsa console da log qilamiz
+        console.warn(`404 Not Found: ${req.url}`);
         return throwError(() => error);
       }
 

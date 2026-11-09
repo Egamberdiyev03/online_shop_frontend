@@ -97,7 +97,10 @@ export class OrderService {
 
   // Eskirgan chaqiruvlar uchun moslik (orqaga moslashuv)
   getByCustomerId(_customerId?: number): Observable<Order[]> {
-    return this.getMyOrders();
+    // To'lovlar sahifasi uchun 50 ta buyurtma yetarli
+    return this.getMyOrdersPaged(1, 50).pipe(
+      map(res => res.items || [])
+    );
   }
 
   updateStatus(orderId: number, status: OrderStatus): Observable<boolean> {

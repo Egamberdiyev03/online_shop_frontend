@@ -715,7 +715,7 @@ export class ProfileComponent implements OnInit, OnDestroy {
   openHelp(): void {
     this.tg.hapticImpact('light');
     // Telegram orqali bog'lanish
-    const supportUsername = environment.telegramSupportUsername || 'yourstore_support';
+    const supportUsername = environment.telegramSupportUsername;
     const telegramUrl = `https://t.me/${supportUsername}`;
 
     if (this.tg.isMiniApp()) {

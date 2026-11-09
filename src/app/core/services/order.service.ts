@@ -56,8 +56,12 @@ export class OrderService {
   }
 
   getMyOrders(): Observable<Order[]> {
-    return this.http.get<ResponseModel<Order[]> | Order[]>(`${this.apiUrl}/GetOrderByUserId`).pipe(
-      map(res => this.normalizeOrders(unwrapResult(res)))
+    // Barcha buyurtmalarni olish uchun katta pageSize ishlatamiz
+    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/GetOrderByUserId?pageNumber=1&pageSize=500`).pipe(
+      map(res => {
+        const data = unwrapResult(res);
+        return this.normalizeOrders(data?.items || []);
+      })
     );
   }
 

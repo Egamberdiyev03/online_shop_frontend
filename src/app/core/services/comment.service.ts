@@ -51,9 +51,13 @@ export class CommentService {
     );
   }
 
-  getByCustomerId(customerId: number): Observable<Comment[]> {
-    return this.http.get<ResponseModel<Comment[]> | Comment[]>(`${this.apiUrl}/GetByCustomerId?customerId=${customerId}`).pipe(
-      map(res => unwrapResult(res) || [])
+  /**
+   * @deprecated Bu metod endi ishlatilmaydi. getMy() dan foydalaning.
+   */
+  getByCustomerId(_customerId: number): Observable<Comment[]> {
+    // Eski metod - getMy() ga yo'naltirish
+    return this.getMy(1, 100).pipe(
+      map(res => res.items || [])
     );
   }
 
@@ -68,9 +72,11 @@ export class CommentService {
 
   /**
    * Joriy foydalanuvchining sharhlari (pagination bilan)
+   * Backend: GET /api/Comment/GetByUserId?pageNumber=1&pageSize=10
+   * UserId token'dan olinadi
    */
   getMy(pageNumber = 1, pageSize = 10): Observable<PagedCommentResult> {
-    return this.http.get<ResponseModel<PagedCommentResult>>(`${this.apiUrl}/GetMy?pageNumber=${pageNumber}&pageSize=${pageSize}`).pipe(
+    return this.http.get<ResponseModel<PagedCommentResult>>(`${this.apiUrl}/GetByUserId?pageNumber=${pageNumber}&pageSize=${pageSize}`).pipe(
       map(res => {
         const data = unwrapResult(res);
         return data || { items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0, hasNextPage: false };

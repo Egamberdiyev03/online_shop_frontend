@@ -76,6 +76,26 @@ export class PaymentService {
     );
   }
 
+  // 3.1. Foydalanuvchi to'lovlarini olish (pagination bilan) - N+1 muammosini hal qiladi
+  getPaymentsByUserId(pageNumber: number = 1, pageSize: number = 10): Observable<PagedResult<Payment>> {
+    return this.http.get<ResponseModel<PagedResult<Payment>>>(
+      `${this.apiUrl}/get-by-user?pageNumber=${pageNumber}&pageSize=${pageSize}`
+    ).pipe(
+      map(res => {
+        const data = unwrapResult(res);
+        if (data && data.items) {
+          return {
+            ...data,
+            items: this.normalizePayments(data.items),
+            totalPages: data.totalPages || Math.ceil((data.totalCount || 0) / pageSize)
+          };
+        }
+        return { items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0 } as PagedResult<Payment>;
+      }),
+      catchError(() => of({ items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0 } as PagedResult<Payment>))
+    );
+  }
+
   // 4. Barcha to'lovlar (raw API)
   getAllPayments(status?: PaymentStatus, branchId?: number): Observable<Payment[]> {
     let url = `${this.apiUrl}/get-all`;
@@ -128,28 +148,22 @@ export class PaymentService {
     return this.rejectPayment({ paymentId: id, reason }, adminId);
   }
 
-  // Mijoz uchun o'z buyurtmalari bo'yicha to'lovlarni olish (Payment/get-all 403 xato bermasligi uchun)
+  // Mijoz uchun o'z to'lovlarini olish - OPTIMIZED: 1 ta so'rov (N+1 muammo hal qilindi)
   getCustomerPayments(customerId: number): Observable<{ payments: Payment[]; orders: Order[] }> {
-    return this.orderService.getByCustomerId(customerId).pipe(
-      catchError(() => of([] as Order[])),
-      switchMap(orders => {
-        if (!orders || orders.length === 0) {
-          return of({ payments: [] as Payment[], orders: [] as Order[] });
-        }
-        const paymentObservables = orders.map(o => 
-          this.getPaymentByOrderId(o.id).pipe(catchError(() => of(null)))
-        );
-        return forkJoin(paymentObservables).pipe(
-          map(results => {
-            const payments = (results || []).filter((p): p is Payment => p !== null && p !== undefined);
-            return { payments, orders };
-          })
-        );
-      })
+    // Parallel: to'lovlar va buyurtmalarni bir vaqtda olish
+    return forkJoin({
+      paymentsResult: this.getPaymentsByUserId(1, 50),
+      orders: this.orderService.getByCustomerId(customerId).pipe(catchError(() => of([] as Order[])))
+    }).pipe(
+      map(({ paymentsResult, orders }) => ({
+        payments: paymentsResult.items || [],
+        orders: orders || []
+      }))
     );
   }
 
   // Filial mudiri uchun o'z filiali buyurtmalari bo'yicha to'lovlarni olish (Payment/get-all 403 xato bermasligi uchun)
+  // TAKLIF: Backend OrderDto ichiga PaymentDto qo'shilsa, alohida so'rovlar kerak bo'lmaydi
   getBranchPayments(branchId: number): Observable<{ payments: Payment[]; orders: Order[] }> {
     return this.orderService.getOrdersByBranchId(branchId).pipe(
       catchError(() => of([] as Order[])),
@@ -158,7 +172,16 @@ export class PaymentService {
         if (orderList.length === 0) {
           return of({ payments: [] as Payment[], orders: [] as Order[] });
         }
-        const paymentObservables = orderList.map(o => 
+
+        // 1. Agar backend Order ichida payment qaytargan bo'lsa, alohida so'rovlar kerak emas
+        const ordersWithPayment = orderList.filter(o => o.payment);
+        if (ordersWithPayment.length > 0) {
+          const payments = ordersWithPayment.map(o => this.normalizePayment(o.payment));
+          return of({ payments, orders: orderList });
+        }
+
+        // 2. Aks holda, har bir order uchun payment olish (N so'rov)
+        const paymentObservables = orderList.map(o =>
           this.getPaymentByOrderId(o.id).pipe(catchError(() => of(null)))
         );
         return forkJoin(paymentObservables).pipe(

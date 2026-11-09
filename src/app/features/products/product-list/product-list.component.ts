@@ -1709,6 +1709,11 @@ export class ProductListComponent implements OnInit {
   toggleAnalytics(): void {
     if (!this.canViewAnalytics) return;
     this.showAnalytics = !this.showAnalytics;
+
+    // Analitika ochilganda category counts va stock ma'lumotlarini yuklash
+    if (this.showAnalytics && this.allProductsList.length === 0) {
+      this.loadCategoryCounts();
+    }
   }
 
   get totalAllProducts(): number {
@@ -1887,13 +1892,13 @@ export class ProductListComponent implements OnInit {
       }
     });
 
-    // Load categories
+    // Load categories (kategoriya sonlari uchun getAll chaqirilmaydi - faqat analitika ochilganda)
     this.categoryService.getAll().pipe(
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: (cats) => {
         this.categories = (cats || []).filter(c => c.isActive);
-        this.loadCategoryCounts();
+        // loadCategoryCounts() endi faqat analitika ochilganda chaqiriladi
       },
       error: () => {}
     });

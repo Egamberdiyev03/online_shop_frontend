@@ -4,5 +4,5 @@ export const environment = {
   //apiUrl: 'http://18.212.160.124'
   //apiUrl: '/api',
   // Telegram yordam username (@ belgisisiz)
-  telegramSupportUsername: ''
+  telegramSupportUsername: 'Egamberdiyev_Asadbek'
 };

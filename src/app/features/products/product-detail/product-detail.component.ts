@@ -1,9 +1,9 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
 import { Product } from '../../../core/models/product.model';
-import { Comment, CreateCommentDto } from '../../../core/models/comment.model';
+import { Comment } from '../../../core/models/comment.model';
 import { ProductService } from '../../../core/services/product.service';
 import { CommentService } from '../../../core/services/comment.service';
 import { CartService } from '../../../core/services/cart.service';
@@ -17,10 +17,10 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
   selector: 'app-product-detail',
   standalone: true,
   imports: [
-    CommonModule, 
-    RouterModule, 
-    ReactiveFormsModule, 
-    LoadingSpinnerComponent, 
+    CommonModule,
+    RouterModule,
+    FormsModule,
+    LoadingSpinnerComponent,
     StarRatingComponent,
     EmptyStateComponent
   ],
@@ -118,7 +118,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
           <div class="comments-header">
             <div>
               <h2 class="comments-title">Xaridorlar Sharhlari</h2>
-              <p class="comments-subtitle">Ushbu mahsulot haqida o'z fikringiz va bahoingizni qoldiring</p>
+              <p class="comments-subtitle">Mahsulotni sotib olganlar fikrlari</p>
             </div>
 
             <div class="avg-rating-badge">
@@ -130,45 +130,10 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
             </div>
           </div>
 
-          <!-- Add Comment Form -->
-          <div class="add-comment-card">
-            <h4 class="form-title">Yangi sharh yozish</h4>
-            <form [formGroup]="commentForm" (ngSubmit)="submitComment()">
-              <div class="form-group">
-                <label class="form-label">Bahoyingiz (1-5 yulduz) *</label>
-                <app-star-rating 
-                  [rating]="selectedStarRating" 
-                  [readonly]="false" 
-                  (ratingChange)="onRatingChange($event)"
-                ></app-star-rating>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Fikringiz *</label>
-                <textarea 
-                  class="form-control" 
-                  formControlName="content" 
-                  rows="3" 
-                  placeholder="Mahsulot sifati, yetkazib berilishi va taassurotlaringiz..."
-                ></textarea>
-                <div class="form-error" *ngIf="commentForm.get('content')?.touched && commentForm.get('content')?.invalid">
-                  Sharh matni kamida 3 ta belgidan iborat bo'lishi kerak.
-                </div>
-              </div>
-
-              <div class="form-submit-row">
-                <span class="customer-info-note">
-                  Izoh qoldiruvchi: <strong>#{{ authState.currentCustomerId() }}</strong>
-                </span>
-                <button 
-                  type="submit" 
-                  class="btn btn-primary" 
-                  [disabled]="commentForm.invalid || isSubmittingComment"
-                >
-                  {{ isSubmittingComment ? 'Yuborilmoqda...' : 'Sharhni yuborish' }}
-                </button>
-              </div>
-            </form>
+          <!-- Info: Sharh qoldirish uchun buyurtma qabul qilinishi kerak -->
+          <div class="comment-info-box">
+            <span class="info-icon">💡</span>
+            <span class="info-text">Sharh qoldirish uchun mahsulotni sotib olib, buyurtmani qabul qilganingizdan so'ng "Buyurtmalarim" sahifasidan sharh yozishingiz mumkin.</span>
           </div>
 
           <!-- Comments List -->
@@ -517,6 +482,24 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
       opacity: 1;
       text-decoration: underline;
     }
+    .comment-info-box {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem;
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-md);
+      margin-bottom: 1.5rem;
+    }
+    .info-icon {
+      font-size: 1.25rem;
+    }
+    .info-text {
+      font-size: 0.875rem;
+      color: #1e40af;
+      line-height: 1.5;
+    }
   `]
 })
 export class ProductDetailComponent implements OnInit {
@@ -526,7 +509,6 @@ export class ProductDetailComponent implements OnInit {
   private cartService = inject(CartService);
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
-  private fb = inject(FormBuilder);
 
   product: Product | null = null;
   comments: Comment[] = [];
@@ -540,15 +522,7 @@ export class ProductDetailComponent implements OnInit {
     return this.isAddingToCart ? "Qo'shilmoqda..." : "Savatga qo'shish";
   }
 
-  selectedStarRating = 5;
-  isSubmittingComment = false;
-  commentForm!: FormGroup;
-
   ngOnInit(): void {
-    this.commentForm = this.fb.group({
-      content: ['', [Validators.required, Validators.minLength(3)]]
-    });
-
     this.route.paramMap.subscribe(params => {
       const idStr = params.get('id');
       if (idStr) {
@@ -577,12 +551,11 @@ export class ProductDetailComponent implements OnInit {
     this.commentService.getByProductId(productId).subscribe({
       next: (comments) => {
         console.log('API comments response:', comments);
-        if (Array.isArray(comments) && comments.length > 0) {
-          this.comments = comments;
-        }
+        this.comments = Array.isArray(comments) ? comments : [];
       },
       error: (err) => {
         console.error('Load comments error:', err);
+        this.comments = [];
       }
     });
   }
@@ -592,10 +565,6 @@ export class ProductDetailComponent implements OnInit {
       next: (avg) => (this.averageRating = avg || 0),
       error: () => {}
     });
-  }
-
-  onRatingChange(star: number): void {
-    this.selectedStarRating = star;
   }
 
   addToCart(): void {
@@ -612,58 +581,6 @@ export class ProductDetailComponent implements OnInit {
       },
       error: () => {
         this.isAddingToCart = false;
-      }
-    });
-  }
-
-  submitComment(): void {
-    if (this.commentForm.invalid || !this.product) return;
-
-    // UserId tekshiruvi
-    const userId = this.authState.currentUser()?.userId || this.authState.currentCustomerId();
-    if (!userId || userId <= 0) {
-      this.notification.error("Sharh qoldirish uchun tizimga kiring!");
-      return;
-    }
-
-    this.isSubmittingComment = true;
-
-    const productId = this.product.id;
-    const dto: CreateCommentDto = {
-      productId: productId,
-      userId: userId,
-      content: this.commentForm.value.content,
-      starRating: this.selectedStarRating
-    };
-
-    console.log('Submitting comment:', dto);
-
-    this.commentService.create(dto).subscribe({
-      next: (newComment) => {
-        this.isSubmittingComment = false;
-        this.notification.success("Sharhingiz qabul qilindi!");
-        this.commentForm.reset();
-        this.selectedStarRating = 5;
-
-        console.log('New comment response:', newComment);
-
-        // Yangi sharhni ro'yxat boshiga qo'shish
-        if (newComment) {
-          const commentToAdd = {
-            ...newComment,
-            id: newComment.id || (newComment as any).Id,
-            userName: this.authState.userName() || ('Mijoz #' + dto.userId)
-          };
-          this.comments = [commentToAdd, ...this.comments];
-        }
-
-        // O'rtacha bahoni yangilash
-        this.loadAverageRating(productId);
-      },
-      error: (err) => {
-        this.isSubmittingComment = false;
-        this.notification.error("Sharh qo'shishda xatolik yuz berdi.");
-        console.error('Create comment error:', err);
       }
     });
   }

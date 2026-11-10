@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Comment, CreateCommentDto, UpdateCommentDto, PagedCommentResult } from '../models/comment.model';
-import { ResponseModel, unwrapResult } from '../models/response.model';
+import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
 
 @Injectable({
   providedIn: 'root'
@@ -14,7 +14,15 @@ export class CommentService {
 
   create(dto: CreateCommentDto): Observable<Comment> {
     return this.http.post<ResponseModel<Comment> | Comment>(`${this.apiUrl}/Create`, dto).pipe(
-      map(res => unwrapResult(res))
+      map(res => {
+        console.log('Comment API raw response:', res);
+        if (isErrorResponse(res)) {
+          const errorMsg = (res as ResponseModel<Comment>).message || "Sharh qo'shishda xatolik";
+          console.error('Comment API error:', errorMsg);
+          throw new Error(errorMsg);
+        }
+        return unwrapResult(res);
+      })
     );
   }
 
@@ -45,9 +53,19 @@ export class CommentService {
     );
   }
 
-  getByProductId(productId: number): Observable<Comment[]> {
-    return this.http.get<ResponseModel<Comment[]> | Comment[]>(`${this.apiUrl}/GetByProductId?productId=${productId}`).pipe(
-      map(res => unwrapResult(res) || [])
+  getByProductId(productId: number, pageNumber = 1, pageSize = 50): Observable<Comment[]> {
+    return this.http.get<any>(`${this.apiUrl}/GetByProductId?productId=${productId}&pageNumber=${pageNumber}&pageSize=${pageSize}`).pipe(
+      map(res => {
+        const result = unwrapResult(res);
+        // Pagination bilan kelsa items ni olish
+        if (result && result.items && Array.isArray(result.items)) {
+          return result.items;
+        }
+        if (Array.isArray(result)) {
+          return result;
+        }
+        return [];
+      })
     );
   }
 

@@ -3,10 +3,10 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, switchMap, of, catchError, tap } from 'rxjs';
 import { Product, CreateProductDto, UpdateProductDto, PagedResult } from '../../../core/models/product.model';
 import { Category } from '../../../core/models/category.model';
-import { ProductService } from '../../../core/services/product.service';
+import { ProductService, ProductQuery } from '../../../core/services/product.service';
 import { CategoryService } from '../../../core/services/category.service';
 import { CartService } from '../../../core/services/cart.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
@@ -235,9 +235,9 @@ import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashb
                 <span class="tag-label">Kategoriya:</span> {{ getSelectedCategoryName() }}
                 <button class="tag-remove" (click)="selectCategory(null)" aria-label="Kategoriyani olib tashlash">&times;</button>
               </span>
-              <span class="filter-tag" *ngIf="sortBy !== 'default'">
+              <span class="filter-tag" *ngIf="sortBy !== 'newest'">
                 <span class="tag-label">Tartiblash:</span> {{ getSortLabel(sortBy) }}
-                <button class="tag-remove" (click)="selectSort('default')" aria-label="Tartiblashni olib tashlash">&times;</button>
+                <button class="tag-remove" (click)="selectSort('newest')" aria-label="Tartiblashni olib tashlash">&times;</button>
               </span>
             </div>
             <button class="clear-all-btn" (click)="resetFilters()">
@@ -283,14 +283,17 @@ import { ChartCardComponent, DonutSlice } from '../../../shared/components/dashb
 
         <!-- Products Grid -->
         <div class="products-grid" *ngIf="!isLoading && products.length > 0">
-          <div class="product-card" *ngFor="let product of products">
+          <div class="product-card" *ngFor="let product of products; let i = index">
             <div class="card-image-wrap" (click)="goToProduct(product.id)">
               <img
                 *ngIf="product.image"
                 [src]="product.image"
                 [alt]="product.name"
                 class="product-image"
-                loading="lazy"
+                width="260"
+                height="210"
+                [attr.loading]="i < 4 ? 'eager' : 'lazy'"
+                [attr.fetchpriority]="i < 4 ? 'high' : 'auto'"
                 (error)="product.image = ''"
               />
               <div *ngIf="!product.image" class="image-fallback">
@@ -1801,15 +1804,14 @@ export class ProductListComponent implements OnInit {
   searchFocused = false;
   private searchSubject = new Subject<string>();
   selectedCategoryId: number | null = null;
-  sortBy = 'default';
+  sortBy = 'newest';
   sortDropdownOpen = false;
 
   sortOptions = [
-    { value: 'default', label: 'Standart', icon: '📋' },
-    { value: 'price-asc', label: 'Narx: Arzondan qimmatga', icon: '💰' },
-    { value: 'price-desc', label: 'Narx: Qimmatdan arzonga', icon: '💎' },
-    { value: 'name', label: 'Nom: A-Z', icon: '🔤' },
-    { value: 'newest', label: 'Yangilari', icon: '✨' }
+    { value: 'newest', label: 'Yangilari birinchi', icon: '✨', sortBy: 'id', isDescending: true },
+    { value: 'price-asc', label: 'Arzonroq birinchi', icon: '💰', sortBy: 'price', isDescending: false },
+    { value: 'price-desc', label: 'Qimmatroq birinchi', icon: '💎', sortBy: 'price', isDescending: true },
+    { value: 'name-asc', label: 'Nom A-Z', icon: '🔤', sortBy: 'name', isDescending: false }
   ];
 
   // Server-side Pagination state
@@ -1825,7 +1827,7 @@ export class ProductListComponent implements OnInit {
   addingProductId: number | null = null;
 
   get hasActiveFilters(): boolean {
-    return !!this.searchQuery || this.selectedCategoryId !== null || this.sortBy !== 'default';
+    return !!this.searchQuery || this.selectedCategoryId !== null || this.sortBy !== 'newest';
   }
 
   get visiblePages(): number[] {
@@ -1846,16 +1848,52 @@ export class ProductListComponent implements OnInit {
       });
     }
 
-    // Setup debounce for search
+    // Setup debounce for search with switchMap to cancel previous requests
     this.searchSubject.pipe(
-      debounceTime(300),
+      debounceTime(400),
       distinctUntilChanged(),
+      tap(() => {
+        this.currentPage = 1;
+        this.updateUrlParams();
+      }),
+      switchMap(() => {
+        this.isLoading = true;
+        const sortOption = this.sortOptions.find(o => o.value === this.sortBy);
+        const query: ProductQuery = {
+          pageNumber: this.currentPage,
+          pageSize: this.pageSize,
+          search: this.searchQuery || undefined,
+          categoryId: this.selectedCategoryId || undefined,
+          companyBranchId: this.authState.isBranchManager() ? this.authState.userBranchId() || undefined : undefined,
+          sortBy: sortOption?.sortBy,
+          isDescending: sortOption?.isDescending
+        };
+        return this.productService.getPaged(query).pipe(
+          catchError(() => {
+            this.products = [];
+            this.totalItems = 0;
+            this.totalPages = 1;
+            this.isLoading = false;
+            this.isSearching = false;
+            return of(null);
+          })
+        );
+      }),
       takeUntilDestroyed(this.destroyRef)
-    ).subscribe(() => {
+    ).subscribe((res) => {
       this.isSearching = false;
-      this.currentPage = 1;
-      this.updateUrlParams();
-      this.loadData();
+      if (res && res.items) {
+        this.products = res.items;
+        this.totalItems = res.totalCount;
+        this.totalPages = res.totalPages || 1;
+        this.hasPrevious = res.hasPreviousPage;
+        this.hasNext = res.hasNextPage;
+      } else if (Array.isArray(res)) {
+        this.products = res;
+        this.totalItems = res.length;
+        this.totalPages = Math.ceil(res.length / this.pageSize) || 1;
+      }
+      this.isLoading = false;
     });
 
     // Read query parameters
@@ -1876,7 +1914,7 @@ export class ProductListComponent implements OnInit {
         }
       }
       if (params['sort'] !== undefined && params['sort'] !== this.sortBy) {
-        this.sortBy = params['sort'] || 'default';
+        this.sortBy = params['sort'] || 'newest';
         shouldLoad = true;
       }
       if (params['page'] !== undefined) {
@@ -1996,10 +2034,15 @@ export class ProductListComponent implements OnInit {
   }
 
   selectSort(value: string): void {
+    if (this.sortBy === value) {
+      this.sortDropdownOpen = false;
+      return;
+    }
     this.sortBy = value;
     this.sortDropdownOpen = false;
+    this.currentPage = 1;
     this.updateUrlParams();
-    this.applyLocalSort();
+    this.loadData();
   }
 
   getSortLabel(value: string): string {
@@ -2033,24 +2076,32 @@ export class ProductListComponent implements OnInit {
 
   loadData(): void {
     this.isLoading = true;
-    // BranchManager uchun faqat o'z filiali mahsulotlarini ko'rsatish
-    const branchId = this.authState.isBranchManager() ? this.authState.userBranchId() || undefined : undefined;
 
-    this.productService.getPaged(
-      this.currentPage,
-      this.pageSize,
-      this.searchQuery,
-      this.selectedCategoryId || undefined,
-      branchId
-    ).subscribe({
+    // Sort parametrlarini olish
+    const sortOption = this.sortOptions.find(o => o.value === this.sortBy);
+
+    // Query parametrlarini yig'ish
+    const query: ProductQuery = {
+      pageNumber: this.currentPage,
+      pageSize: this.pageSize,
+      search: this.searchQuery || undefined,
+      categoryId: this.selectedCategoryId || undefined,
+      companyBranchId: this.authState.isBranchManager() ? this.authState.userBranchId() || undefined : undefined,
+      sortBy: sortOption?.sortBy,
+      isDescending: sortOption?.isDescending
+    };
+
+    console.log('loadData query:', query);
+
+    this.productService.getPaged(query).subscribe({
       next: (res: any) => {
+        console.log('getPaged response:', res);
         if (res && res.items) {
           this.products = res.items;
           this.totalItems = res.totalCount;
           this.totalPages = res.totalPages || 1;
           this.hasPrevious = res.hasPreviousPage;
           this.hasNext = res.hasNextPage;
-          this.applyLocalSort();
         } else if (Array.isArray(res)) {
           this.products = res;
           this.totalItems = res.length;
@@ -2058,55 +2109,14 @@ export class ProductListComponent implements OnInit {
         }
         this.isLoading = false;
       },
-      error: () => {
-        // Fallback to getAll
-        this.productService.getAll().subscribe({
-          next: (all) => {
-            let list = all || [];
-            // BranchManager uchun faqat o'z filiali mahsulotlarini ko'rsatish
-            if (this.authState.isBranchManager()) {
-              const userBranchId = this.authState.userBranchId();
-              if (userBranchId) {
-                list = list.filter(p => p.companyBranchId === userBranchId);
-              }
-            }
-            if (this.searchQuery) {
-              const q = this.searchQuery.toLowerCase();
-              list = list.filter(p =>
-                p.name.toLowerCase().includes(q) ||
-                (p.description && p.description.toLowerCase().includes(q))
-              );
-            }
-            if (this.selectedCategoryId) {
-              list = list.filter(p => p.categoryId === this.selectedCategoryId);
-            }
-            this.totalItems = list.length;
-            this.totalPages = Math.ceil(list.length / this.pageSize) || 1;
-            const start = (this.currentPage - 1) * this.pageSize;
-            this.products = list.slice(start, start + this.pageSize);
-            this.hasPrevious = this.currentPage > 1;
-            this.hasNext = this.currentPage < this.totalPages;
-            this.applyLocalSort();
-            this.isLoading = false;
-          },
-          error: () => {
-            this.isLoading = false;
-          }
-        });
+      error: (err) => {
+        console.error('getPaged error:', err);
+        this.products = [];
+        this.totalItems = 0;
+        this.totalPages = 1;
+        this.isLoading = false;
       }
     });
-  }
-
-  applyLocalSort(): void {
-    if (this.sortBy === 'price-asc') {
-      this.products.sort((a, b) => a.price - b.price);
-    } else if (this.sortBy === 'price-desc') {
-      this.products.sort((a, b) => b.price - a.price);
-    } else if (this.sortBy === 'name') {
-      this.products.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (this.sortBy === 'newest') {
-      this.products.sort((a, b) => b.id - a.id);
-    }
   }
 
   goToProduct(productId: number): void {
@@ -2223,7 +2233,7 @@ export class ProductListComponent implements OnInit {
   resetFilters(): void {
     this.searchQuery = '';
     this.selectedCategoryId = null;
-    this.sortBy = 'default';
+    this.sortBy = 'newest';
     this.currentPage = 1;
     this.updateUrlParams();
     this.loadData();

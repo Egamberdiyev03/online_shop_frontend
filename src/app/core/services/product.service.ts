@@ -1,9 +1,19 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Product, CreateProductDto, UpdateProductDto, PagedResult } from '../models/product.model';
 import { ResponseModel, unwrapResult } from '../models/response.model';
+
+export interface ProductQuery {
+  pageNumber?: number;
+  pageSize?: number;
+  search?: string;
+  sortBy?: string;
+  isDescending?: boolean;
+  categoryId?: number;
+  companyBranchId?: number;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -18,17 +28,32 @@ export class ProductService {
     );
   }
 
-  getPaged(
-    pageNumber: number = 1, 
-    pageSize: number = 12, 
-    search: string = '', 
-    categoryId?: number, 
-    branchId?: number
-  ): Observable<PagedResult<Product>> {
-    let params: any = { pageNumber, pageSize };
-    if (search && search.trim()) params.search = search.trim();
-    if (categoryId && categoryId > 0) params.categoryId = categoryId;
-    if (branchId && branchId > 0) params.branchId = branchId;
+  getPaged(query: ProductQuery = {}): Observable<PagedResult<Product>> {
+    let params = new HttpParams()
+      .set('PageNumber', (query.pageNumber || 1).toString())
+      .set('PageSize', (query.pageSize || 12).toString());
+
+    // SortBy va IsDescending
+    if (query.sortBy) {
+      params = params.set('SortBy', query.sortBy);
+      params = params.set('IsDescending', (query.isDescending ?? false).toString());
+    }
+
+    // Name filter - qidiruv uchun
+    const searchTrimmed = query.search?.trim();
+    if (searchTrimmed) {
+      params = params.set('Filters[name]', searchTrimmed);
+    }
+
+    // CategoryId filter
+    if (query.categoryId && query.categoryId > 0) {
+      params = params.set('Filters[categoryId]', query.categoryId.toString());
+    }
+
+    // CompanyBranchId filter
+    if (query.companyBranchId && query.companyBranchId > 0) {
+      params = params.set('Filters[companyBranchId]', query.companyBranchId.toString());
+    }
 
     return this.http.get<ResponseModel<PagedResult<Product>> | PagedResult<Product>>(`${this.apiUrl}/GetPaged`, { params }).pipe(
       map(res => unwrapResult(res))

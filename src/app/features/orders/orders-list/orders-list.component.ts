@@ -2,7 +2,7 @@ import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
-import { Order, OrderStatus, OrderFilter, OrderStatusCounts, OrderPaymentFilter, parseOrderStatus } from '../../../core/models/order.model';
+import { Order, OrderItem, OrderStatus, OrderFilter, OrderStatusCounts, OrderPaymentFilter, parseOrderStatus } from '../../../core/models/order.model';
 import { CompanyBranch } from '../../../core/models/company-branch.model';
 import { Company } from '../../../core/models/company.model';
 import { Payment, PaymentStatus, PaymentStatusLabels, PagedResult, parsePaymentStatus } from '../../../core/models/payment.model';
@@ -13,6 +13,8 @@ import { PaymentService } from '../../../core/services/payment.service';
 import { CustomerService } from '../../../core/services/customer.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
+import { CommentService } from '../../../core/services/comment.service';
+import { CreateCommentDto } from '../../../core/models/comment.model';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
@@ -254,12 +256,21 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
               </button>
 
               <!-- Cancel Button: Opens dedicated modal -->
-              <button 
+              <button
                 *ngIf="canCancel(order.status)"
                 class="btn btn-danger btn-sm cancel-btn"
                 (click)="openCancelModal(order)"
               >
                 ✕ Buyurtmani bekor qilish
+              </button>
+
+              <!-- Sharh qoldirish tugmasi - faqat yetkazilgan buyurtmalar uchun -->
+              <button
+                *ngIf="canLeaveComment(order)"
+                class="btn btn-success btn-sm comment-btn"
+                (click)="openCommentModal(order)"
+              >
+                ⭐ Sharh qoldirish
               </button>
 
               <!-- Admin Status Change Dropdown -->
@@ -726,6 +737,74 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
           </div>
         </div>
       </div>
+
+      <!-- Comment Modal - Sharh qoldirish -->
+      <div class="modal-overlay" *ngIf="showCommentModal" (click)="closeCommentModal()">
+        <div class="modal-content comment-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header modal-header-success">
+            <h3 class="modal-title">⭐ Sharh qoldirish</h3>
+            <button class="modal-close" (click)="closeCommentModal()">&times;</button>
+          </div>
+
+          <div class="modal-body" *ngIf="orderForComment">
+            <div class="comment-product-info">
+              <p class="info-label">Buyurtma #{{ orderForComment.id }} mahsulotlari:</p>
+              <div class="product-chips">
+                <span
+                  *ngFor="let item of orderForComment.orderItems"
+                  class="product-chip"
+                  [class.selected]="selectedProductForComment?.productId === item.productId"
+                  (click)="selectProductForComment(item)"
+                >
+                  {{ item.productName || ('Mahsulot #' + item.productId) }}
+                </span>
+              </div>
+            </div>
+
+            <div class="comment-form" *ngIf="selectedProductForComment">
+              <div class="form-group">
+                <label class="form-label">Bahoyingiz (1-5 yulduz)</label>
+                <div class="star-rating-input">
+                  <span
+                    *ngFor="let star of [1,2,3,4,5]"
+                    class="star-btn"
+                    [class.filled]="star <= commentStarRating"
+                    (click)="setCommentRating(star)"
+                  >★</span>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Fikringiz</label>
+                <textarea
+                  [(ngModel)]="commentContent"
+                  class="form-control"
+                  rows="3"
+                  placeholder="Mahsulot sifati, yetkazib berilishi haqida fikringiz..."
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="no-product-selected" *ngIf="!selectedProductForComment">
+              <p>👆 Sharh qoldirish uchun yuqoridagi mahsulotlardan birini tanlang</p>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeCommentModal()">
+              Bekor qilish
+            </button>
+            <button
+              type="button"
+              class="btn btn-success"
+              [disabled]="!selectedProductForComment || !commentContent || commentContent.length < 3 || isSubmittingComment"
+              (click)="submitComment()"
+            >
+              {{ isSubmittingComment ? 'Yuborilmoqda...' : 'Sharhni yuborish' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
@@ -1059,6 +1138,85 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       padding: 1rem 1.5rem;
       border-top: 1px solid #f1f5f9;
       background: #f8fafc;
+    }
+
+    /* Comment Modal */
+    .comment-modal {
+      max-width: 520px;
+    }
+    .modal-header-success {
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      border-bottom: 1px solid #a7f3d0;
+    }
+    .modal-header-success .modal-title {
+      color: #065f46;
+    }
+    .comment-product-info {
+      margin-bottom: 1.25rem;
+    }
+    .info-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 0.75rem;
+    }
+    .product-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .product-chip {
+      padding: 0.5rem 1rem;
+      background: #f1f5f9;
+      border: 2px solid #e2e8f0;
+      border-radius: 999px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #475569;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .product-chip:hover {
+      background: #e2e8f0;
+      border-color: #cbd5e1;
+    }
+    .product-chip.selected {
+      background: #dbeafe;
+      border-color: #3b82f6;
+      color: #1d4ed8;
+    }
+    .comment-form {
+      margin-top: 1rem;
+    }
+    .star-rating-input {
+      display: flex;
+      gap: 0.25rem;
+    }
+    .star-btn {
+      font-size: 1.75rem;
+      color: #d1d5db;
+      cursor: pointer;
+      transition: color 0.15s, transform 0.15s;
+    }
+    .star-btn:hover {
+      transform: scale(1.1);
+    }
+    .star-btn.filled {
+      color: #fbbf24;
+    }
+    .no-product-selected {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: #64748b;
+      font-size: 0.9rem;
+    }
+    .comment-btn {
+      background: #059669;
+      color: #ffffff;
+      border: none;
+    }
+    .comment-btn:hover {
+      background: #047857;
     }
 
     /* Payment Badges & UI */
@@ -1852,6 +2010,15 @@ export class OrdersListComponent implements OnInit {
   showCancelModal = false;
   orderToCancel: Order | null = null;
   isCancelling = false;
+
+  // Comment modal state
+  private commentService = inject(CommentService);
+  showCommentModal = false;
+  orderForComment: Order | null = null;
+  selectedProductForComment: OrderItem | null = null;
+  commentStarRating = 5;
+  commentContent = '';
+  isSubmittingComment = false;
 
   get showBranchDropdown(): boolean {
     return !this.authState.isBranchManager();
@@ -2822,6 +2989,80 @@ export class OrdersListComponent implements OnInit {
       }
     });
   }
+
+  // ========== Comment Modal Methods ==========
+
+  canLeaveComment(order: Order): boolean {
+    // Faqat mijoz (admin emas) va faqat yetkazilgan buyurtmalar uchun
+    if (this.authState.isAdminMode() || this.authState.isAdminRole()) return false;
+    const s = parseOrderStatus(order.status);
+    return s === OrderStatus.Delivered;
+  }
+
+  openCommentModal(order: Order): void {
+    this.orderForComment = order;
+    this.selectedProductForComment = null;
+    this.commentStarRating = 5;
+    this.commentContent = '';
+    this.showCommentModal = true;
+  }
+
+  closeCommentModal(): void {
+    this.showCommentModal = false;
+    this.orderForComment = null;
+    this.selectedProductForComment = null;
+  }
+
+  selectProductForComment(item: OrderItem): void {
+    this.selectedProductForComment = item;
+  }
+
+  setCommentRating(star: number): void {
+    this.commentStarRating = star;
+  }
+
+  submitComment(): void {
+    if (!this.selectedProductForComment || !this.commentContent || this.commentContent.length < 3) {
+      return;
+    }
+
+    const userId = this.authState.currentUser()?.userId || this.authState.currentCustomerId();
+    if (!userId) {
+      this.notification.error("Sharh qoldirish uchun tizimga kiring!");
+      return;
+    }
+
+    this.isSubmittingComment = true;
+
+    const dto: CreateCommentDto = {
+      productId: this.selectedProductForComment.productId,
+      userId: userId,
+      content: this.commentContent,
+      starRating: this.commentStarRating
+    };
+
+    console.log('Sending comment DTO:', dto);
+
+    this.commentService.create(dto).subscribe({
+      next: (result) => {
+        this.isSubmittingComment = false;
+        if (result && result.id) {
+          this.notification.success("Sharhingiz muvaffaqiyatli qabul qilindi!");
+          this.closeCommentModal();
+        } else {
+          this.notification.error("Sharh saqlanmadi. Qaytadan urinib ko'ring.");
+        }
+      },
+      error: (err) => {
+        this.isSubmittingComment = false;
+        const errorMsg = err?.message || err?.error?.message || "Sharh qo'shishda xatolik yuz berdi.";
+        this.notification.error(errorMsg);
+        console.error('Comment create error:', err);
+      }
+    });
+  }
+
+  // ========================================
 
   isOrderFinal(status: any): boolean {
     const s = parseOrderStatus(status);

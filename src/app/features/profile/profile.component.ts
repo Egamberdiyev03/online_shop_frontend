@@ -46,7 +46,10 @@ import { environment } from '../../../environments/environment';
           <!-- Name & Phone -->
           <div class="user-details">
             <h2 class="user-name">{{ displayName }}</h2>
-            <p class="user-phone" *ngIf="phoneNumber">{{ phoneNumber }}</p>
+            <div class="user-meta">
+              <span class="role-badge" [class]="roleBadgeClass">{{ roleLabel }}</span>
+              <span class="user-phone" *ngIf="phoneNumber">{{ phoneNumber }}</span>
+            </div>
           </div>
         </div>
       </header>
@@ -318,10 +321,52 @@ import { environment } from '../../../environments/environment';
       text-overflow: ellipsis;
     }
 
+    .user-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .role-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .role-super-admin {
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+      color: #78350f;
+    }
+
+    .role-company-admin {
+      background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+      color: #1e1b4b;
+    }
+
+    .role-branch-manager {
+      background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+      color: #064e3b;
+    }
+
+    .role-branch-admin {
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+      color: #1e3a5f;
+    }
+
+    .role-customer {
+      background: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+
     .user-phone {
       font-size: 14px;
       color: rgba(255, 255, 255, 0.8);
-      margin: 0;
     }
 
     /* ===== SKELETON ===== */
@@ -678,6 +723,28 @@ export class ProfileComponent implements OnInit, OnDestroy {
     if (this.currentTheme === 'auto') return 'Avto';
     if (this.currentTheme === 'dark') return 'Tun';
     return 'Kun';
+  }
+
+  get roleLabel(): string {
+    const role = this.authState.userRole();
+    switch (role) {
+      case 'SuperAdmin': return 'Super Admin';
+      case 'CompanyAdmin': return 'Kompaniya Admin';
+      case 'BranchManager': return 'Filial Mudiri';
+      case 'BranchAdmin': return 'Filial Admin';
+      default: return 'Mijoz';
+    }
+  }
+
+  get roleBadgeClass(): string {
+    const role = this.authState.userRole();
+    switch (role) {
+      case 'SuperAdmin': return 'role-super-admin';
+      case 'CompanyAdmin': return 'role-company-admin';
+      case 'BranchManager': return 'role-branch-manager';
+      case 'BranchAdmin': return 'role-branch-admin';
+      default: return 'role-customer';
+    }
   }
 
   onMenuClick(): void {

@@ -32,7 +32,11 @@ import { Company } from '../../../core/models/company.model';
             ✕ Tozalash
           </button>
           <button type="button" class="collapse-toggle-btn" [class.collapsed]="isCollapsed">
-            {{ isCollapsed ? '▼ Ko‘rsatish' : '▲ Yashirish' }}
+            @if (isCollapsed) {
+              ▼ Ko'rsatish
+            } @else {
+              ▲ Yashirish
+            }
           </button>
         </div>
       </div>

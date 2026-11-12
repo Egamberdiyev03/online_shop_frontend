@@ -52,11 +52,6 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
           </div>
 
           <div class="info-section">
-            <div class="rating-header">
-              <app-star-rating [rating]="averageRating" [showValue]="true"></app-star-rating>
-              <span class="reviews-count">({{ comments.length }} ta sharh)</span>
-            </div>
-
             <h1 class="title">{{ product.name }}</h1>
 
             <div class="meta-row">
@@ -118,7 +113,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
           <div class="comments-header">
             <div>
               <h2 class="comments-title">Xaridorlar Sharhlari</h2>
-              <p class="comments-subtitle">Mahsulotni sotib olganlar fikrlari</p>
+              <p class="comments-subtitle">{{ totalCommentsCount }} ta sharh</p>
             </div>
 
             <div class="avg-rating-badge">
@@ -172,14 +167,19 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
             </div>
 
             <!-- Load More Button -->
-            <button
-              *ngIf="hasMoreComments"
-              class="load-more-btn"
-              [disabled]="isLoadingMoreComments"
-              (click)="loadMoreComments()"
-            >
-              {{ isLoadingMoreComments ? 'Yuklanmoqda...' : 'Yana ko\'rsatish' }}
-            </button>
+            @if (hasMoreComments) {
+              <button
+                class="load-more-btn"
+                [disabled]="isLoadingMoreComments"
+                (click)="loadMoreComments()"
+              >
+                @if (isLoadingMoreComments) {
+                  Yuklanmoqda...
+                } @else {
+                  Yana ko'rsatish
+                }
+              </button>
+            }
           </div>
         </div>
       </div>
@@ -247,16 +247,6 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
     .info-section {
       display: flex;
       flex-direction: column;
-    }
-    .rating-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-    .reviews-count {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
     }
     .title {
       font-size: 1.875rem;

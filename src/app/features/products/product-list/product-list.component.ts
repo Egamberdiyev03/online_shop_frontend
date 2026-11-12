@@ -119,7 +119,7 @@ interface SortOption {
         <!-- Skeleton Loading -->
         @if (isLoading()) {
           <div class="products-grid skeleton-grid">
-            @for (i of skeletonItems; track i) {
+            @for (i of skeletonItems; track $index) {
               <div class="skeleton-card">
                 <div class="skeleton-image"></div>
                 <div class="skeleton-body">
@@ -211,9 +211,9 @@ interface SortOption {
                     </span>
                   }
 
-                  <!-- Rating & Reviews Badge (chap past) - faqat baho bo'lganda ko'rsatiladi -->
-                  @if (product.averageRating && product.averageRating > 0 || product.commentsCount && product.commentsCount > 0) {
-                    <div class="rating-badge">
+                  <!-- Rating & Reviews Badge (chap past) -->
+                  <div class="rating-badge">
+                    @if (product.commentsCount && product.commentsCount > 0) {
                       <span class="rating-item">
                         <svg class="rating-icon" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
@@ -225,10 +225,14 @@ interface SortOption {
                         <svg class="comment-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
                         </svg>
-                        {{ product.commentsCount || 0 }}
+                        {{ product.commentsCount }}
                       </span>
-                    </div>
-                  }
+                    } @else {
+                      <span class="rating-item new-badge">
+                        ✨ Yangi
+                      </span>
+                    }
+                  </div>
 
                   <!-- Quick Hover Actions -->
                   <div class="card-hover-actions" (click)="$event.stopPropagation()">
@@ -271,6 +275,19 @@ interface SortOption {
                       <span class="branch-text">Filial ko'rsatilmagan</span>
                     }
                   </div>
+
+                  <!-- Stock Badge -->
+                  @if (product.quantity > 0) {
+                    <div class="stock-badge" [class.stock-low]="product.quantity <= LOW_STOCK_THRESHOLD">
+                      @if (product.quantity <= LOW_STOCK_THRESHOLD) {
+                        <span class="stock-icon">⚠️</span>
+                        <span>Oxirgi {{ product.quantity }} dona</span>
+                      } @else {
+                        <span class="stock-icon">📦</span>
+                        <span>Omborda: {{ product.quantity }} dona</span>
+                      }
+                    </div>
+                  }
 
                   <div class="price-row">
                     <div class="product-price">
@@ -665,6 +682,11 @@ interface SortOption {
       font-size: 0.75rem;
     }
 
+    .new-badge {
+      color: #fbbf24;
+      font-weight: 700;
+    }
+
     .card-hover-actions {
       position: absolute;
       bottom: 0.75rem;
@@ -745,6 +767,33 @@ interface SortOption {
       display: inline-flex;
       align-items: center;
       gap: 0.25rem;
+    }
+
+    .stock-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary, #64748b);
+      background: var(--bg-tertiary, #f1f5f9);
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      margin-bottom: 0.5rem;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stock-badge.stock-low {
+      color: var(--warning-text, #b45309);
+      background: var(--warning-bg, #fef3c7);
+    }
+
+    .stock-icon {
+      font-size: 0.875rem;
+      flex-shrink: 0;
     }
 
     .price-row {
@@ -1143,6 +1192,18 @@ interface SortOption {
       color: #94a3b8;
     }
 
+    :host-context(body.dark-theme) .stock-badge,
+    :host-context(.dark-theme) .stock-badge {
+      background: #1e293b;
+      color: #94a3b8;
+    }
+
+    :host-context(body.dark-theme) .stock-badge.stock-low,
+    :host-context(.dark-theme) .stock-badge.stock-low {
+      background: #422006;
+      color: #fbbf24;
+    }
+
     :host-context(body.dark-theme) .pagination-bar,
     :host-context(.dark-theme) .pagination-bar {
       background: #151e32;
@@ -1293,6 +1354,7 @@ export class ProductListComponent implements OnInit {
 
   private searchSubject = new Subject<string>();
   skeletonItems = Array(8).fill(0);
+  readonly LOW_STOCK_THRESHOLD = 5;
 
   sortOptions: SortOption[] = [
     { value: 'newest', label: 'Yangilari birinchi', icon: '✨', sortBy: 'CreatedAt', isDescending: true },

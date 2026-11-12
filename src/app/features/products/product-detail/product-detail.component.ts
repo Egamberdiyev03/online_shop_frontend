@@ -63,8 +63,8 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
               <span class="stock-status" [class.in-stock]="product.quantity > 0" [class.out]="product.quantity <= 0">
                 ● {{ product.quantity > 0 ? ('Omborda mavjud: ' + product.quantity + ' dona') : 'Omborda tugagan' }}
               </span>
-              <span class="branch-pill" *ngIf="product.companyBranchId">
-                📍 Filial: #{{ product.companyBranchId }}
+              <span class="branch-pill" *ngIf="product.branchName || product.companyBranchId">
+                📍 Filial: {{ product.branchName || ('#' + product.companyBranchId) }}
               </span>
             </div>
 
@@ -170,6 +170,16 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
                 &times; O'chirish
               </button>
             </div>
+
+            <!-- Load More Button -->
+            <button
+              *ngIf="hasMoreComments"
+              class="load-more-btn"
+              [disabled]="isLoadingMoreComments"
+              (click)="loadMoreComments()"
+            >
+              {{ isLoadingMoreComments ? 'Yuklanmoqda...' : 'Yana ko\'rsatish' }}
+            </button>
           </div>
         </div>
       </div>
@@ -482,6 +492,28 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
       opacity: 1;
       text-decoration: underline;
     }
+    .load-more-btn {
+      display: block;
+      width: 100%;
+      padding: 0.875rem 1.5rem;
+      margin-top: 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--primary);
+      background: var(--primary-light);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .load-more-btn:hover:not(:disabled) {
+      background: var(--primary);
+      color: #fff;
+    }
+    .load-more-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
     .comment-info-box {
       display: flex;
       align-items: center;
@@ -510,10 +542,17 @@ export class ProductDetailComponent implements OnInit {
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
 
+  private readonly COMMENTS_PAGE_SIZE = 10;
+
   product: Product | null = null;
   comments: Comment[] = [];
   averageRating: number = 0;
   isLoading = true;
+
+  // Comments pagination
+  commentsPageNumber = 1;
+  totalCommentsCount = 0;
+  isLoadingMoreComments = false;
 
   selectedQuantity = 1;
   isAddingToCart = false;
@@ -548,16 +587,46 @@ export class ProductDetailComponent implements OnInit {
   }
 
   loadComments(productId: number): void {
-    this.commentService.getByProductId(productId).subscribe({
-      next: (comments) => {
-        console.log('API comments response:', comments);
-        this.comments = Array.isArray(comments) ? comments : [];
+    this.commentsPageNumber = 1;
+    this.commentService.getByProductIdPaged(productId, {
+      pageNumber: this.commentsPageNumber,
+      pageSize: this.COMMENTS_PAGE_SIZE
+    }).subscribe({
+      next: (result) => {
+        this.comments = result.items || [];
+        this.totalCommentsCount = result.totalCount || 0;
       },
       error: (err) => {
         console.error('Load comments error:', err);
         this.comments = [];
+        this.totalCommentsCount = 0;
       }
     });
+  }
+
+  loadMoreComments(): void {
+    if (!this.product || this.isLoadingMoreComments) return;
+
+    this.isLoadingMoreComments = true;
+    this.commentsPageNumber++;
+
+    this.commentService.getByProductIdPaged(this.product.id, {
+      pageNumber: this.commentsPageNumber,
+      pageSize: this.COMMENTS_PAGE_SIZE
+    }).subscribe({
+      next: (result) => {
+        this.comments = [...this.comments, ...(result.items || [])];
+        this.isLoadingMoreComments = false;
+      },
+      error: () => {
+        this.commentsPageNumber--;
+        this.isLoadingMoreComments = false;
+      }
+    });
+  }
+
+  get hasMoreComments(): boolean {
+    return this.comments.length < this.totalCommentsCount;
   }
 
   loadAverageRating(productId: number): void {

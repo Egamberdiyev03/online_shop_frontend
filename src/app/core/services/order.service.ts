@@ -1,9 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Order, OrderStatus, OrderFilter, OrderStatusCounts, parseOrderStatus } from '../models/order.model';
-import { PagedResult } from '../models/payment.model';
+import { PagedResult, PagedQuery } from '../models/payment.model';
 import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
 
 @Injectable({
@@ -49,10 +49,56 @@ export class OrderService {
     );
   }
 
+  /**
+   * @deprecated Eski metod - getAllPaged() dan foydalaning
+   */
   getAll(): Observable<Order[]> {
-    return this.http.get<ResponseModel<Order[]> | Order[]>(`${this.apiUrl}/GetAll`).pipe(
-      map(res => this.normalizeOrders(unwrapResult(res)))
+    return this.getAllPaged({ pageNumber: 1, pageSize: 500 }).pipe(
+      map(res => res.items || [])
     );
+  }
+
+  /**
+   * Barcha buyurtmalarni pagination bilan olish
+   * Backend: GET /api/Order/GetAll?PageNumber=1&PageSize=12&SortBy=&IsDescending=false
+   */
+  getAllPaged(query: PagedQuery = {}): Observable<PagedResult<Order>> {
+    let params = this.appendPagedParams(new HttpParams(), query);
+
+    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/GetAll`, { params }).pipe(
+      map(res => {
+        const data = unwrapResult(res);
+        if (data && data.items) {
+          return { ...data, items: this.normalizeOrders(data.items) };
+        }
+        return this.emptyPagedResult(query);
+      })
+    );
+  }
+
+  private emptyPagedResult(query: PagedQuery = {}): PagedResult<Order> {
+    return {
+      items: [],
+      totalCount: 0,
+      pageNumber: query.pageNumber || 1,
+      pageSize: query.pageSize || 12,
+      totalPages: 0,
+      hasPreviousPage: false,
+      hasNextPage: false
+    };
+  }
+
+  private appendPagedParams(params: HttpParams, query: PagedQuery): HttpParams {
+    if (query.pageNumber) params = params.set('PageNumber', query.pageNumber.toString());
+    if (query.pageSize) params = params.set('PageSize', query.pageSize.toString());
+    if (query.sortBy) params = params.set('SortBy', query.sortBy);
+    if (query.isDescending !== undefined) params = params.set('IsDescending', query.isDescending.toString());
+    if (query.filters) {
+      Object.entries(query.filters).forEach(([key, value]) => {
+        params = params.set(`Filters[${key}]`, value);
+      });
+    }
+    return params;
   }
 
   getMyOrders(): Observable<Order[]> {
@@ -67,30 +113,24 @@ export class OrderService {
 
   /**
    * Pagination bilan foydalanuvchi buyurtmalarini olish
-   * Backend: GET /api/Order/GetOrderByUserId?pageNumber=1&pageSize=10
+   * Backend: GET /api/Order/GetOrderByUserId?PageNumber=1&PageSize=10
    */
   getMyOrdersPaged(pageNumber: number = 1, pageSize: number = 10): Observable<PagedResult<Order>> {
-    const clampedPageSize = Math.min(pageSize, 50); // max 50
-    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/GetOrderByUserId?pageNumber=${pageNumber}&pageSize=${clampedPageSize}`).pipe(
+    const query: PagedQuery = { pageNumber, pageSize };
+    let params = new HttpParams()
+      .set('PageNumber', pageNumber.toString())
+      .set('PageSize', pageSize.toString());
+
+    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/GetOrderByUserId`, { params }).pipe(
       map(res => {
         const data = unwrapResult(res);
         if (data && data.items) {
           return {
             ...data,
-            items: this.normalizeOrders(data.items),
-            totalCount: data.totalCount || data.total || 0
+            items: this.normalizeOrders(data.items)
           };
         }
-        // Agar bo'sh javob kelsa
-        return {
-          items: [],
-          totalCount: 0,
-          pageNumber: pageNumber,
-          pageSize: clampedPageSize,
-          totalPages: 0,
-          hasPreviousPage: false,
-          hasNextPage: false
-        };
+        return this.emptyPagedResult(query);
       })
     );
   }
@@ -121,9 +161,52 @@ export class OrderService {
     );
   }
 
+  /**
+   * @deprecated Eski metod - getOrdersByBranchIdPaged() dan foydalaning
+   */
   getOrdersByBranchId(branchId: number): Observable<Order[]> {
-    return this.http.get<ResponseModel<Order[]> | Order[]>(`${this.apiUrl}/GetOrdersByBranchId?branchId=${branchId}`).pipe(
-      map(res => this.normalizeOrders(unwrapResult(res)))
+    return this.getOrdersByBranchIdPaged(branchId, { pageNumber: 1, pageSize: 500 }).pipe(
+      map(res => res.items || [])
+    );
+  }
+
+  /**
+   * Filial bo'yicha buyurtmalarni pagination bilan olish
+   * Backend: GET /api/Order/GetOrdersByBranchId?branchId=1&PageNumber=1&PageSize=12
+   */
+  getOrdersByBranchIdPaged(branchId: number, query: PagedQuery = {}): Observable<PagedResult<Order>> {
+    let params = new HttpParams().set('branchId', branchId.toString());
+    params = this.appendPagedParams(params, query);
+
+    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/GetOrdersByBranchId`, { params }).pipe(
+      map(res => {
+        const data = unwrapResult(res);
+        if (data && data.items) {
+          return { ...data, items: this.normalizeOrders(data.items) };
+        }
+        return this.emptyPagedResult(query);
+      })
+    );
+  }
+
+  /**
+   * Sana oralig'ida buyurtmalarni olish
+   * Backend: GET /api/Order/GetOrdersByDateRange?from=2024-01-01&to=2024-12-31&PageNumber=1&PageSize=12
+   */
+  getOrdersByDateRange(from: string, to: string, query: PagedQuery = {}): Observable<PagedResult<Order>> {
+    let params = new HttpParams()
+      .set('from', from)
+      .set('to', to);
+    params = this.appendPagedParams(params, query);
+
+    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/GetOrdersByDateRange`, { params }).pipe(
+      map(res => {
+        const data = unwrapResult(res);
+        if (data && data.items) {
+          return { ...data, items: this.normalizeOrders(data.items) };
+        }
+        return this.emptyPagedResult(query);
+      })
     );
   }
 
@@ -249,19 +332,21 @@ export class OrderService {
     });
 
     // 8. Pagination
-    const total = result.length;
+    const totalCount = result.length;
     const pageNumber = Math.max(1, filter.pageNumber || 1);
     const pageSize = Math.max(1, filter.pageSize || 10);
-    const totalPages = Math.ceil(total / pageSize) || 1;
+    const totalPages = Math.ceil(totalCount / pageSize) || 1;
     const startIndex = (pageNumber - 1) * pageSize;
     const paginatedItems = result.slice(startIndex, startIndex + pageSize);
 
     return {
       items: paginatedItems,
-      total,
+      totalCount,
       pageNumber,
       pageSize,
-      totalPages
+      totalPages,
+      hasPreviousPage: pageNumber > 1,
+      hasNextPage: pageNumber < totalPages
     };
   }
 }

@@ -142,13 +142,20 @@ export interface PaymentFilter {
 
 export interface PagedResult<T> {
   items: T[];
-  total?: number;
-  totalCount?: number;
+  totalCount: number;
   pageNumber: number;
   pageSize: number;
   totalPages: number;
-  hasPreviousPage?: boolean;
-  hasNextPage?: boolean;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+export interface PagedQuery {
+  pageNumber?: number;
+  pageSize?: number;
+  sortBy?: string;
+  isDescending?: boolean;
+  filters?: { [key: string]: string };
 }
 
 export interface CreatePaymentDto {

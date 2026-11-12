@@ -7,6 +7,7 @@ export interface Product {
   createdAt?: string;
   image?: string;
   companyBranchId?: number;
+  branchName?: string;
   quantity: number;
   // Extra UI helpers
   categoryTitle?: string;

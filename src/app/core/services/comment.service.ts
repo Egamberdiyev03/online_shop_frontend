@@ -1,9 +1,10 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Comment, CreateCommentDto, UpdateCommentDto, PagedCommentResult } from '../models/comment.model';
 import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
+import { PagedResult, PagedQuery } from '../models/payment.model';
 
 @Injectable({
   providedIn: 'root'
@@ -32,10 +33,55 @@ export class CommentService {
     );
   }
 
+  /**
+   * @deprecated Eski metod - getAllPaged() dan foydalaning
+   */
   getAll(): Observable<Comment[]> {
-    return this.http.get<Comment[] | ResponseModel<Comment[]>>(`${this.apiUrl}/GetAll`).pipe(
-      map(res => unwrapResult(res) || [])
+    return this.getAllPaged({ pageNumber: 1, pageSize: 500 }).pipe(
+      map(res => res.items || [])
     );
+  }
+
+  /**
+   * Barcha sharhlarni pagination bilan olish
+   * Backend: GET /api/Comment/GetAll?PageNumber=1&PageSize=12&SortBy=&IsDescending=false
+   */
+  getAllPaged(query: PagedQuery = {}): Observable<PagedResult<Comment>> {
+    const params = this.buildPagedParams(query);
+
+    return this.http.get<ResponseModel<PagedResult<Comment>>>(`${this.apiUrl}/GetAll`, { params }).pipe(
+      map(res => this.handlePagedResponse(res, query))
+    );
+  }
+
+  private buildPagedParams(query: PagedQuery, initial?: HttpParams): HttpParams {
+    let params = initial || new HttpParams();
+    if (query.pageNumber) params = params.set('PageNumber', query.pageNumber.toString());
+    if (query.pageSize) params = params.set('PageSize', query.pageSize.toString());
+    if (query.sortBy) params = params.set('SortBy', query.sortBy);
+    if (query.isDescending !== undefined) params = params.set('IsDescending', query.isDescending.toString());
+    if (query.filters) {
+      Object.entries(query.filters).forEach(([key, value]) => {
+        params = params.set(`Filters[${key}]`, value);
+      });
+    }
+    return params;
+  }
+
+  private handlePagedResponse(res: any, query: PagedQuery = {}): PagedResult<Comment> {
+    const data = unwrapResult(res);
+    if (data && data.items) {
+      return data;
+    }
+    return {
+      items: [],
+      totalCount: 0,
+      pageNumber: query.pageNumber || 1,
+      pageSize: query.pageSize || 12,
+      totalPages: 0,
+      hasPreviousPage: false,
+      hasNextPage: false
+    };
   }
 
   update(dto: UpdateCommentDto): Observable<Comment> {
@@ -53,19 +99,25 @@ export class CommentService {
     );
   }
 
+  /**
+   * @deprecated Eski metod - getByProductIdPaged() dan foydalaning
+   */
   getByProductId(productId: number, pageNumber = 1, pageSize = 50): Observable<Comment[]> {
-    return this.http.get<any>(`${this.apiUrl}/GetByProductId?productId=${productId}&pageNumber=${pageNumber}&pageSize=${pageSize}`).pipe(
-      map(res => {
-        const result = unwrapResult(res);
-        // Pagination bilan kelsa items ni olish
-        if (result && result.items && Array.isArray(result.items)) {
-          return result.items;
-        }
-        if (Array.isArray(result)) {
-          return result;
-        }
-        return [];
-      })
+    return this.getByProductIdPaged(productId, { pageNumber, pageSize }).pipe(
+      map(res => res.items || [])
+    );
+  }
+
+  /**
+   * Mahsulot sharhlari - pagination bilan
+   * Backend: GET /api/Comment/GetByProductId?productId=1&PageNumber=1&PageSize=12
+   */
+  getByProductIdPaged(productId: number, query: PagedQuery = {}): Observable<PagedResult<Comment>> {
+    const initial = new HttpParams().set('productId', productId.toString());
+    const params = this.buildPagedParams(query, initial);
+
+    return this.http.get<ResponseModel<PagedResult<Comment>>>(`${this.apiUrl}/GetByProductId`, { params }).pipe(
+      map(res => this.handlePagedResponse(res, query))
     );
   }
 
@@ -90,15 +142,31 @@ export class CommentService {
 
   /**
    * Joriy foydalanuvchining sharhlari (pagination bilan)
-   * Backend: GET /api/Comment/GetByUserId?pageNumber=1&pageSize=10
+   * Backend: GET /api/Comment/GetByUserId?PageNumber=1&PageSize=12
    * UserId token'dan olinadi
    */
-  getMy(pageNumber = 1, pageSize = 10): Observable<PagedCommentResult> {
-    return this.http.get<ResponseModel<PagedCommentResult>>(`${this.apiUrl}/GetByUserId?pageNumber=${pageNumber}&pageSize=${pageSize}`).pipe(
-      map(res => {
-        const data = unwrapResult(res);
-        return data || { items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0, hasNextPage: false };
-      })
+  getMy(pageNumber = 1, pageSize = 12): Observable<PagedCommentResult> {
+    return this.getMyPaged({ pageNumber, pageSize }).pipe(
+      map(res => ({
+        items: res.items || [],
+        totalCount: res.totalCount || 0,
+        pageNumber: res.pageNumber,
+        pageSize: res.pageSize,
+        totalPages: res.totalPages,
+        hasNextPage: res.hasNextPage || false
+      }))
+    );
+  }
+
+  /**
+   * Joriy foydalanuvchining sharhlari - PagedQuery bilan
+   * Backend: GET /api/Comment/GetByUserId?PageNumber=1&PageSize=12&SortBy=&IsDescending=false
+   */
+  getMyPaged(query: PagedQuery = {}): Observable<PagedResult<Comment>> {
+    const params = this.buildPagedParams(query);
+
+    return this.http.get<ResponseModel<PagedResult<Comment>>>(`${this.apiUrl}/GetByUserId`, { params }).pipe(
+      map(res => this.handlePagedResponse(res, query))
     );
   }
 }

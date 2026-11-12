@@ -90,9 +90,9 @@ export class PaymentService {
             totalPages: data.totalPages || Math.ceil((data.totalCount || 0) / pageSize)
           };
         }
-        return { items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0 } as PagedResult<Payment>;
+        return { items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0, hasPreviousPage: false, hasNextPage: false };
       }),
-      catchError(() => of({ items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0 } as PagedResult<Payment>))
+      catchError(() => of({ items: [], totalCount: 0, pageNumber, pageSize, totalPages: 0, hasPreviousPage: false, hasNextPage: false }))
     );
   }
 
@@ -375,19 +375,21 @@ export class PaymentService {
         });
 
         // 4. Pagination
-        const total = items.length;
+        const totalCount = items.length;
         const pageNumber = Math.max(1, filter.pageNumber || 1);
         const pageSize = Math.max(1, filter.pageSize || 10);
-        const totalPages = Math.ceil(total / pageSize) || 1;
+        const totalPages = Math.ceil(totalCount / pageSize) || 1;
         const startIndex = (pageNumber - 1) * pageSize;
         const paginatedItems = items.slice(startIndex, startIndex + pageSize);
 
         return {
           items: paginatedItems,
-          total,
+          totalCount,
           pageNumber,
           pageSize,
-          totalPages
+          totalPages,
+          hasPreviousPage: pageNumber > 1,
+          hasNextPage: pageNumber < totalPages
         };
       })
     );

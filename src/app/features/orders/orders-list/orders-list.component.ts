@@ -38,7 +38,7 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
   ],
   template: `
     <div class="container">
-      <!-- Page Header (Matching UI Spec: # Mening buyurtmalarim, Mijoz #... hisobidagi buyurtmalar tarixi va holati) -->
+      <!-- Page Header -->
       <div class="page-header">
         <div>
           <h1 class="page-title">
@@ -46,12 +46,10 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
                 ? 'Filial buyurtmalari'
                 : (viewMode === 'my' ? 'Mening buyurtmalarim' : "Kompaniyalar bo'yicha buyurtmalar") }}
           </h1>
-          <p class="page-subtitle">
+          <p class="page-subtitle" *ngIf="authState.isBranchManager() || viewMode !== 'my'">
             {{ authState.isBranchManager()
                 ? 'Filial #' + (authState.userBranchId() || '') + ' - buyurtmalar boshqaruvi'
-                : (viewMode === 'my'
-                    ? 'Mijoz #' + (authState.currentCustomerId() || 5) + ' hisobidagi buyurtmalar tarixi va holati'
-                    : 'Tizimdagi filiallar va mijozlarning buyurtmalari boshqaruvi') }}
+                : 'Tizimdagi filiallar va mijozlarning buyurtmalari boshqaruvi' }}
           </p>
         </div>
 

@@ -269,11 +269,16 @@ export class TelegramService {
     }
   }
 
-  // Dialogs
+  // Dialogs - faqat haqiqiy Mini App ichida Telegram metodlarini ishlatish
   showAlert(message: string): Promise<void> {
     return new Promise((resolve) => {
-      if (this.tg) {
-        this.tg.showAlert(message, () => resolve());
+      if (this._isMiniApp() && this.tg) {
+        try {
+          this.tg.showAlert(message, () => resolve());
+        } catch {
+          alert(message);
+          resolve();
+        }
       } else {
         alert(message);
         resolve();
@@ -283,8 +288,12 @@ export class TelegramService {
 
   showConfirm(message: string): Promise<boolean> {
     return new Promise((resolve) => {
-      if (this.tg) {
-        this.tg.showConfirm(message, (confirmed) => resolve(confirmed));
+      if (this._isMiniApp() && this.tg) {
+        try {
+          this.tg.showConfirm(message, (confirmed) => resolve(confirmed));
+        } catch {
+          resolve(confirm(message));
+        }
       } else {
         resolve(confirm(message));
       }
@@ -293,7 +302,7 @@ export class TelegramService {
 
   // Navigation
   openLink(url: string, tryInstantView = false): void {
-    if (this.tg) {
+    if (this._isMiniApp() && this.tg) {
       this.tg.openLink(url, { try_instant_view: tryInstantView });
     } else {
       window.open(url, '_blank');
@@ -302,7 +311,7 @@ export class TelegramService {
 
   // Telegram havolasini ochish (t.me/...)
   openTelegramLink(url: string): void {
-    if (this.tg) {
+    if (this._isMiniApp() && this.tg) {
       this.tg.openTelegramLink(url);
     } else {
       window.open(url, '_blank');
@@ -311,7 +320,9 @@ export class TelegramService {
 
   // Close app
   close(): void {
-    this.tg?.close();
+    if (this._isMiniApp()) {
+      this.tg?.close();
+    }
   }
 
   // Expand to full height

@@ -233,31 +233,6 @@ interface SortOption {
                       </span>
                     }
                   </div>
-
-                  <!-- Quick Hover Actions -->
-                  <div class="card-hover-actions" (click)="$event.stopPropagation()">
-                    <a [routerLink]="['/products', product.id]" class="quick-act-btn" title="Batafsil ko'rish">
-                      👁️
-                    </a>
-                    @if (authState.canUseCart() && product.quantity > 0) {
-                      <button
-                        class="quick-act-btn cart-act"
-                        (click)="addToCart(product)"
-                        title="Savatga qo'shish"
-                      >
-                        🛒
-                      </button>
-                    }
-                    @if (authState.isAdminMode() || authState.isAdminRole()) {
-                      <button
-                        class="quick-act-btn edit-act"
-                        (click)="openEditModal(product)"
-                        title="Tahrirlash"
-                      >
-                        ✏️
-                      </button>
-                    }
-                  </div>
                 </div>
 
                 <div class="card-body">
@@ -581,10 +556,13 @@ interface SortOption {
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .product-card:hover {
-      transform: translateY(-6px);
-      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
-      border-color: #cbd5e1;
+    /* Hover effektlari faqat hover qo'llab-quvvatlaydigan qurilmalarda */
+    @media (hover: hover) {
+      .product-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+        border-color: #cbd5e1;
+      }
     }
 
     .card-image-wrap {
@@ -606,8 +584,10 @@ interface SortOption {
       transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .product-card:hover .product-image {
-      transform: scale(1.08);
+    @media (hover: hover) {
+      .product-card:hover .product-image {
+        transform: scale(1.08);
+      }
     }
 
     .image-fallback {
@@ -685,51 +665,6 @@ interface SortOption {
     .new-badge {
       color: #fbbf24;
       font-weight: 700;
-    }
-
-    .card-hover-actions {
-      position: absolute;
-      bottom: 0.75rem;
-      right: 0.75rem;
-      display: flex;
-      gap: 0.5rem;
-      background: rgba(15, 23, 42, 0.85);
-      backdrop-filter: blur(8px);
-      padding: 0.35rem 0.65rem;
-      border-radius: 999px;
-      opacity: 0;
-      visibility: hidden;
-      transform: translateY(10px);
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 3;
-    }
-
-    .product-card:hover .card-hover-actions {
-      opacity: 1;
-      visibility: visible;
-      transform: translateY(0);
-    }
-
-    .quick-act-btn {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.15);
-      border: none;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.9rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-decoration: none;
-    }
-
-    .quick-act-btn:hover {
-      background: white;
-      color: #0f172a;
-      transform: scale(1.1);
     }
 
     .card-body {
@@ -1170,9 +1105,11 @@ interface SortOption {
       border-color: #22304d;
     }
 
-    :host-context(body.dark-theme) .product-card:hover,
-    :host-context(.dark-theme) .product-card:hover {
-      border-color: #3b82f6;
+    @media (hover: hover) {
+      :host-context(body.dark-theme) .product-card:hover,
+      :host-context(.dark-theme) .product-card:hover {
+        border-color: #3b82f6;
+      }
     }
 
     :host-context(body.dark-theme) .card-image-wrap,

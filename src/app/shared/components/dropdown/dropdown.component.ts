@@ -7,7 +7,9 @@ import {
   signal,
   computed,
   input,
-  output
+  output,
+  ViewChild,
+  AfterViewChecked
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
@@ -25,6 +27,7 @@ export interface DropdownOption {
     <div class="dropdown-wrapper" [class.open]="open()" [class.active]="isActive()">
       <!-- Asosiy trigger tugmasi -->
       <button
+        #triggerBtn
         type="button"
         class="dropdown-trigger"
         (click)="toggle()"
@@ -57,11 +60,14 @@ export interface DropdownOption {
         </button>
       }
 
-      <!-- Dropdown menu -->
+      <!-- Dropdown menu - fixed position -->
       @if (open()) {
         <ul
           class="dropdown-menu"
           role="listbox"
+          [style.top.px]="menuPosition().top"
+          [style.left.px]="menuPosition().left"
+          [class.flip-up]="menuPosition().flipUp"
           (keydown)="onMenuKeydown($event)"
         >
           <!-- "Barcha ..." band - faqat allLabel berilgan bo'lsa -->
@@ -225,12 +231,10 @@ export interface DropdownOption {
     }
 
     .dropdown-menu {
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 0;
-      min-width: 100%;
-      max-width: 280px;
-      max-height: 280px;
+      position: fixed;
+      min-width: 140px;
+      max-width: min(280px, calc(100vw - 24px));
+      max-height: min(60vh, 320px);
       overflow-y: auto;
       background: var(--bg-card, #ffffff);
       border: 1px solid var(--border, #e2e8f0);
@@ -238,15 +242,31 @@ export interface DropdownOption {
       padding: 0.375rem;
       margin: 0;
       list-style: none;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
-      z-index: 100;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
       animation: dropdownSlide 0.15s ease-out;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .dropdown-menu.flip-up {
+      animation: dropdownSlideUp 0.15s ease-out;
     }
 
     @keyframes dropdownSlide {
       from {
         opacity: 0;
         transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes dropdownSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
       }
       to {
         opacity: 1;
@@ -353,16 +373,13 @@ export interface DropdownOption {
         padding: 0.5rem 0.75rem;
         font-size: 0.8125rem;
       }
-
-      .dropdown-menu {
-        max-height: 240px;
-        max-width: 240px;
-      }
     }
   `]
 })
-export class DropdownComponent {
+export class DropdownComponent implements AfterViewChecked {
   private elementRef = inject(ElementRef);
+
+  @ViewChild('triggerBtn') triggerBtn!: ElementRef<HTMLButtonElement>;
 
   // Signal inputs
   icon = input<string>();
@@ -376,6 +393,7 @@ export class DropdownComponent {
 
   // State
   open = signal(false);
+  menuPosition = signal({ top: 0, left: 0, flipUp: false });
 
   /**
    * BITTA manba: tugma ham, ro'yxat ham shuni ishlatadi.
@@ -392,8 +410,15 @@ export class DropdownComponent {
   /** × va faol stil faqat allLabel berilgan VA qiymat tanlangan bo'lsa */
   isActive = computed(() => this.allLabel() !== null && this.selected() !== null);
 
+  ngAfterViewChecked(): void {
+    if (this.open()) {
+      this.updateMenuPosition();
+    }
+  }
+
   @HostListener('document:click', ['$event'])
-  onDocumentClick(event: MouseEvent): void {
+  onDocumentClick(event: Event): void {
+    // Touch qurilmalarda click-outside muammosini hal qilish
     if (!this.elementRef.nativeElement.contains(event.target)) {
       this.open.set(false);
     }
@@ -404,8 +429,50 @@ export class DropdownComponent {
     this.open.set(false);
   }
 
+  @HostListener('window:scroll')
+  @HostListener('window:resize')
+  onScrollOrResize(): void {
+    if (this.open()) {
+      this.open.set(false);
+    }
+  }
+
   toggle(): void {
-    this.open.update(v => !v);
+    const willOpen = !this.open();
+    this.open.set(willOpen);
+    if (willOpen) {
+      // Keyingi renderda pozitsiyani hisoblash
+      setTimeout(() => this.updateMenuPosition(), 0);
+    }
+  }
+
+  private updateMenuPosition(): void {
+    if (!this.triggerBtn?.nativeElement) return;
+
+    const rect = this.triggerBtn.nativeElement.getBoundingClientRect();
+    const menuHeight = Math.min(window.innerHeight * 0.6, 320);
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+    const flipUp = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+
+    let top: number;
+    if (flipUp) {
+      top = rect.top - menuHeight - 4;
+    } else {
+      top = rect.bottom + 4;
+    }
+
+    // Left - ekran chetidan chiqmaslik
+    let left = rect.left;
+    const menuWidth = Math.min(280, window.innerWidth - 24);
+    if (left + menuWidth > window.innerWidth - 12) {
+      left = window.innerWidth - menuWidth - 12;
+    }
+    if (left < 12) {
+      left = 12;
+    }
+
+    this.menuPosition.set({ top, left, flipUp });
   }
 
   select(v: string | number | null): void {
@@ -431,6 +498,7 @@ export class DropdownComponent {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
       event.preventDefault();
       this.open.set(true);
+      setTimeout(() => this.updateMenuPosition(), 0);
     }
   }
 

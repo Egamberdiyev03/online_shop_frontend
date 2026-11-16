@@ -1,5 +1,5 @@
-import { Injectable, signal, computed, inject, PLATFORM_ID } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import { Injectable, signal, computed } from '@angular/core';
+
 
 interface TelegramThemeParams {
   bg_color?: string;
@@ -88,14 +88,10 @@ declare global {
   providedIn: 'root'
 })
 export class TelegramService {
-  // MUHIM: bu ikki maydon boshqa barcha maydonlardan OLDIN turishi shart
-  private readonly platformId = inject(PLATFORM_ID);
-  private readonly isBrowser = isPlatformBrowser(this.platformId);
-
   private _isMiniApp = signal(false);
   private _platform = signal<string>('unknown');
   private _colorScheme = signal<'light' | 'dark'>('light');
-  private _viewportHeight = signal(this.isBrowser ? window.innerHeight : 0);
+  private _viewportHeight = signal(window.innerHeight);
   private _isExpanded = signal(false);
 
   // Public signals
@@ -128,9 +124,6 @@ export class TelegramService {
   }
 
   private init(): void {
-    // Serverda (SSR) Telegram yo'q
-    if (!this.isBrowser) return;
-
     try {
       this.tg = window.Telegram?.WebApp ?? null;
 
@@ -189,6 +182,7 @@ export class TelegramService {
         // Set initial viewport height
         document.documentElement.style.setProperty('--tg-viewport-height', `${this.tg.viewportHeight}px`);
         document.documentElement.style.setProperty('--tg-viewport-stable-height', `${this.tg.viewportStableHeight}px`);
+
       }
     } catch (e) {
       console.warn('TelegramService init error:', e);
@@ -196,7 +190,7 @@ export class TelegramService {
   }
 
   private applyThemeColors(): void {
-    if (!this.isBrowser || !this.tg?.themeParams) return;
+    if (!this.tg?.themeParams) return;
 
     const tp = this.tg.themeParams;
     const root = document.documentElement;
@@ -279,10 +273,6 @@ export class TelegramService {
   // Dialogs - faqat haqiqiy Mini App ichida Telegram metodlarini ishlatish
   showAlert(message: string): Promise<void> {
     return new Promise((resolve) => {
-      if (!this.isBrowser) {
-        resolve();
-        return;
-      }
       if (this._isMiniApp() && this.tg) {
         try {
           this.tg.showAlert(message, () => resolve());
@@ -299,10 +289,6 @@ export class TelegramService {
 
   showConfirm(message: string): Promise<boolean> {
     return new Promise((resolve) => {
-      if (!this.isBrowser) {
-        resolve(false);
-        return;
-      }
       if (this._isMiniApp() && this.tg) {
         try {
           this.tg.showConfirm(message, (confirmed) => resolve(confirmed));
@@ -317,7 +303,6 @@ export class TelegramService {
 
   // Navigation
   openLink(url: string, tryInstantView = false): void {
-    if (!this.isBrowser) return;
     if (this._isMiniApp() && this.tg) {
       this.tg.openLink(url, { try_instant_view: tryInstantView });
     } else {
@@ -327,7 +312,6 @@ export class TelegramService {
 
   // Telegram havolasini ochish (t.me/...)
   openTelegramLink(url: string): void {
-    if (!this.isBrowser) return;
     if (this._isMiniApp() && this.tg) {
       this.tg.openTelegramLink(url);
     } else {

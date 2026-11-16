@@ -11,7 +11,7 @@ export interface Comment {
 
 export interface CreateCommentDto {
   content: string;
-  userId: number;
+  userId?: number;
   productId: number;
   starRating: number;
 }

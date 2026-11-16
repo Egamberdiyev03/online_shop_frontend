@@ -16,6 +16,7 @@ import { NotificationService } from '../../../core/services/notification.service
 import { TelegramService } from '../../../core/services/telegram.service';
 import { ProductFormModalComponent } from '../product-form-modal/product-form-modal.component';
 import { DropdownComponent, DropdownOption } from '../../../shared/components/dropdown/dropdown.component';
+import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
 
 interface SortOption {
   value: string;
@@ -33,7 +34,8 @@ interface SortOption {
     RouterModule,
     FormsModule,
     ProductFormModalComponent,
-    DropdownComponent
+    DropdownComponent,
+    ImageUrlPipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -189,7 +191,7 @@ interface SortOption {
                 <div class="card-image-wrap" (click)="goToProduct(product.id)">
                   @if (product.image) {
                     <img
-                      [src]="product.image"
+                      [src]="product.image | imageUrl"
                       [alt]="product.name"
                       class="product-image"
                       width="260"

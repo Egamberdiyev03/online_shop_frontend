@@ -67,15 +67,45 @@ export class ProductService {
   }
 
   create(dto: CreateProductDto): Observable<Product> {
-    return this.http.post<ResponseModel<Product> | Product>(`${this.apiUrl}/Create`, dto).pipe(
+    const formData = this.buildFormData(dto, false);
+    return this.http.post<ResponseModel<Product> | Product>(`${this.apiUrl}/Create`, formData).pipe(
       map(res => unwrapResult(res))
     );
   }
 
   update(dto: UpdateProductDto): Observable<Product> {
-    return this.http.put<ResponseModel<Product> | Product>(`${this.apiUrl}/Update`, dto).pipe(
+    const formData = this.buildFormData(dto, true);
+    return this.http.put<ResponseModel<Product> | Product>(`${this.apiUrl}/Update`, formData).pipe(
       map(res => unwrapResult(res))
     );
+  }
+
+  private buildFormData(dto: CreateProductDto | UpdateProductDto, isUpdate: boolean): FormData {
+    const formData = new FormData();
+
+    if (isUpdate && 'id' in dto) {
+      formData.append('Id', dto.id.toString());
+    }
+
+    formData.append('Name', dto.name);
+    formData.append('Description', dto.description || '');
+    formData.append('Price', dto.price.toString());
+    formData.append('CategoryId', dto.categoryId.toString());
+    formData.append('Quantity', dto.quantity.toString());
+
+    // CompanyBranchId - backend CreateProductDto uchun "companyBranchid" (kichik harf)
+    if (isUpdate) {
+      formData.append('CompanyBranchId', (dto as UpdateProductDto).companyBranchId.toString());
+    } else {
+      formData.append('CompanyBranchid', (dto as CreateProductDto).companyBranchid.toString());
+    }
+
+    // Rasm fayli yuborilsa
+    if (dto.imageFile) {
+      formData.append('Image', dto.imageFile, dto.imageFile.name);
+    }
+
+    return formData;
   }
 
   delete(id: number): Observable<boolean> {

@@ -1,4 +1,5 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { AuthResponseDto, DecodedJwtToken } from '../models/auth.model';
 import { Customer } from '../models/customer.model';
 
@@ -6,6 +7,10 @@ import { Customer } from '../models/customer.model';
   providedIn: 'root'
 })
 export class AuthStateService {
+  // MUHIM: bu ikki maydon signal'lardan OLDIN turishi shart
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly isBrowser = isPlatformBrowser(this.platformId);
+
   private readonly TOKEN_KEY = 'online_shop_token';
   private readonly USER_KEY = 'online_shop_user';
   private readonly CUSTOMER_ID_KEY = 'online_shop_active_customer_id';
@@ -23,7 +28,7 @@ export class AuthStateService {
   userRole = computed(() => this.currentUser()?.role || null);
   userName = computed(() => this.currentUser()?.name || 'Mijoz');
   userEmail = computed(() => this.currentUser()?.email || '');
-  
+
   isSuperAdmin = computed(() => this.userRole() === 'SuperAdmin');
   isCompanyAdmin = computed(() => this.userRole() === 'CompanyAdmin');
   isBranchManager = computed(() => this.userRole() === 'BranchManager' || this.userRole() === 'BranchAdmin');
@@ -35,26 +40,18 @@ export class AuthStateService {
     return role === 'SuperAdmin' || role === 'CompanyAdmin' || role === 'BranchManager' || role === 'BranchAdmin';
   });
 
-  /**
-   * Analitikani ko'rish ruxsati tekshiruvi:
-   * Faqat SuperAdmin, CompanyAdmin va BranchManager ko'rishi mumkin.
-   * Mehmon (login qilmagan) va Customer ko'ra olmaydi.
-   */
   canViewAnalytics = computed(() => {
     if (!this.isAuthenticated()) return false;
     const role = this.userRole();
     return role === 'SuperAdmin' || role === 'CompanyAdmin' || role === 'BranchManager' || role === 'BranchAdmin';
   });
 
-  /**
-   * Rol tekshirish yordamchi metodi
-   */
   hasAnyRole(roles: string[]): boolean {
     const current = this.userRole();
     return current ? roles.includes(current) : false;
   }
 
-  // Savat va savatga qo'shish faqat oddiy mijozlar uchun (adminlar xarid qilmaydi)
+  // Savat faqat oddiy mijozlar uchun
   canUseCart = computed(() => {
     if (this.isAdminRole() || this.isAdminMode()) {
       return false;
@@ -65,13 +62,6 @@ export class AuthStateService {
   userCompanyId = computed(() => this.currentUser()?.companyId || null);
   userBranchId = computed(() => this.currentUser()?.companyBranchId || null);
 
-  /**
-   * Filial tafsilotini ko'rish ruxsati tekshiruvi:
-   * - SuperAdmin: barcha filiallarni ko'ra oladi
-   * - CompanyAdmin: faqat o'z kompaniyasining filiallarini ko'ra oladi
-   * - BranchManager: faqat o'z filialini ko'ra oladi
-   * - Customer / Mehmon: UMUMAN ko'ra olmaydi
-   */
   canViewBranchDetails(branch: { id: number; companyId?: number } | null | undefined): boolean {
     if (!branch || !this.isAuthenticated()) {
       return false;
@@ -87,7 +77,6 @@ export class AuthStateService {
       const myBranchId = this.userBranchId();
       return myBranchId != null && Number(branch.id) === Number(myBranchId);
     }
-    // Customer yoki boshqa rollar uchun ruxsat yo'q
     return false;
   }
 
@@ -95,12 +84,26 @@ export class AuthStateService {
     this.syncSessionOnStartup();
   }
 
+  // ---------- Xavfsiz storage yordamchilari (SSR uchun) ----------
+  private storageGet(key: string): string | null {
+    return this.isBrowser ? localStorage.getItem(key) : null;
+  }
+
+  private storageSet(key: string, value: string): void {
+    if (this.isBrowser) localStorage.setItem(key, value);
+  }
+
+  private storageRemove(key: string): void {
+    if (this.isBrowser) localStorage.removeItem(key);
+  }
+
+  // ---------- Boshlang'ich qiymatlar ----------
   private getInitialToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY);
+    return this.storageGet(this.TOKEN_KEY);
   }
 
   private getInitialUser(): AuthResponseDto | null {
-    const raw = localStorage.getItem(this.USER_KEY);
+    const raw = this.storageGet(this.USER_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw);
@@ -110,7 +113,7 @@ export class AuthStateService {
   }
 
   private getInitialCustomerId(): number {
-    const saved = localStorage.getItem(this.CUSTOMER_ID_KEY);
+    const saved = this.storageGet(this.CUSTOMER_ID_KEY);
     if (saved) {
       const parsed = parseInt(saved, 10);
       if (!isNaN(parsed) && parsed > 0) return parsed;
@@ -119,7 +122,7 @@ export class AuthStateService {
   }
 
   private getInitialAdminMode(): boolean {
-    return localStorage.getItem(this.ADMIN_MODE_KEY) === 'true';
+    return this.storageGet(this.ADMIN_MODE_KEY) === 'true';
   }
 
   private syncSessionOnStartup(): void {
@@ -127,7 +130,7 @@ export class AuthStateService {
     if (currentToken) {
       const decoded = this.decodeToken(currentToken);
       if (decoded) {
-        // Check if token expired
+        // Token muddati tugaganmi
         if (decoded.exp && decoded.exp * 1000 < Date.now()) {
           this.clearSession();
           return;
@@ -138,7 +141,7 @@ export class AuthStateService {
           this.setCustomerId(userId);
         }
 
-        // Token ichidagi claimlardan companyId va companyBranchId ni sinxronlash
+        // Token claimlaridan companyId va companyBranchId ni sinxronlash
         const user = this.currentUser();
         let compId = user?.companyId;
         let branchId = user?.companyBranchId;
@@ -153,12 +156,12 @@ export class AuthStateService {
         if (user && (user.companyId !== compId || user.companyBranchId !== branchId)) {
           const updated = { ...user, companyId: compId, companyBranchId: branchId };
           this.currentUser.set(updated);
-          localStorage.setItem(this.USER_KEY, JSON.stringify(updated));
+          this.storageSet(this.USER_KEY, JSON.stringify(updated));
         }
 
         const isAdmin = decoded.role === 'SuperAdmin' || decoded.role === 'CompanyAdmin' || decoded.role === 'BranchManager' || decoded.role === 'BranchAdmin';
         this.isAdminMode.set(isAdmin);
-        localStorage.setItem(this.ADMIN_MODE_KEY, String(isAdmin));
+        this.storageSet(this.ADMIN_MODE_KEY, String(isAdmin));
       }
     }
   }
@@ -224,16 +227,17 @@ export class AuthStateService {
     this.token.set(auth.token);
     this.currentUser.set(completeAuth);
 
-    localStorage.setItem(this.TOKEN_KEY, auth.token);
-    localStorage.setItem(this.USER_KEY, JSON.stringify(completeAuth));
+    this.storageSet(this.TOKEN_KEY, auth.token);
+    this.storageSet(this.USER_KEY, JSON.stringify(completeAuth));
 
     if (userId) {
       this.setCustomerId(userId);
     }
 
-    const isAdmin = auth.role === 'SuperAdmin' || auth.role === 'CompanyAdmin' || auth.role === 'BranchManager';
+    // BranchAdmin ham qo'shildi (avval yo'q edi)
+    const isAdmin = ['SuperAdmin', 'CompanyAdmin', 'BranchManager', 'BranchAdmin'].includes(auth.role);
     this.isAdminMode.set(isAdmin);
-    localStorage.setItem(this.ADMIN_MODE_KEY, String(isAdmin));
+    this.storageSet(this.ADMIN_MODE_KEY, String(isAdmin));
   }
 
   clearSession(): void {
@@ -241,10 +245,10 @@ export class AuthStateService {
     this.currentUser.set(null);
     this.currentCustomer.set(null);
 
-    localStorage.removeItem(this.TOKEN_KEY);
-    localStorage.removeItem(this.USER_KEY);
-    localStorage.removeItem(this.CUSTOMER_ID_KEY);
-    localStorage.removeItem(this.ADMIN_MODE_KEY);
+    this.storageRemove(this.TOKEN_KEY);
+    this.storageRemove(this.USER_KEY);
+    this.storageRemove(this.CUSTOMER_ID_KEY);
+    this.storageRemove(this.ADMIN_MODE_KEY);
 
     this.currentCustomerId.set(0);
     this.isAdminMode.set(false);
@@ -253,18 +257,17 @@ export class AuthStateService {
   setCustomer(customer: Customer): void {
     this.currentCustomer.set(customer);
     this.currentCustomerId.set(customer.id);
-    localStorage.setItem(this.CUSTOMER_ID_KEY, customer.id.toString());
+    this.storageSet(this.CUSTOMER_ID_KEY, customer.id.toString());
   }
 
   setCustomerId(id: number): void {
     this.currentCustomerId.set(id);
-    localStorage.setItem(this.CUSTOMER_ID_KEY, id.toString());
+    this.storageSet(this.CUSTOMER_ID_KEY, id.toString());
   }
 
   toggleAdminMode(): void {
     const next = !this.isAdminMode();
     this.isAdminMode.set(next);
-    localStorage.setItem(this.ADMIN_MODE_KEY, String(next));
+    this.storageSet(this.ADMIN_MODE_KEY, String(next));
   }
 }
-

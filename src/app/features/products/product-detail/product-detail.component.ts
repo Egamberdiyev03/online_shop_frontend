@@ -12,6 +12,7 @@ import { NotificationService } from '../../../core/services/notification.service
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { StarRatingComponent } from '../../../shared/components/star-rating/star-rating.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
+import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
 
 @Component({
   selector: 'app-product-detail',
@@ -22,7 +23,8 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
     FormsModule,
     LoadingSpinnerComponent,
     StarRatingComponent,
-    EmptyStateComponent
+    EmptyStateComponent,
+    ImageUrlPipe
   ],
   template: `
     <div class="container">
@@ -39,10 +41,10 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
         <!-- Main Product Section -->
         <div class="product-showcase card">
           <div class="image-section">
-            <img 
-              *ngIf="product.image" 
-              [src]="product.image" 
-              [alt]="product.name" 
+            <img
+              *ngIf="product.image"
+              [src]="product.image | imageUrl"
+              [alt]="product.name"
               class="main-img"
               (error)="product.image = ''"
             />

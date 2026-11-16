@@ -72,12 +72,70 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
         </div>
       </div>
 
-      <!-- Status Chips (Matching /payments design) -->
-      <app-status-chips
-        [selectedStatus]="orderFilter.status ?? null"
-        [counts]="statusCounts"
-        (statusChange)="onStatusChipSelected($event)"
-      ></app-status-chips>
+      <!-- Main Tabs for 'my' mode: Faol / Eski -->
+      @if (viewMode === 'my') {
+        <div class="main-tabs-container">
+          <div class="main-tabs">
+            <button
+              type="button"
+              class="main-tab"
+              [class.active]="activeTab === 'active'"
+              (click)="setActiveTab('active')"
+            >
+              <span class="tab-icon">🔥</span>
+              <span class="tab-label">Faol</span>
+              <span class="tab-count">({{ activeOrders.length }})</span>
+            </button>
+            <button
+              type="button"
+              class="main-tab"
+              [class.active]="activeTab === 'past'"
+              (click)="setActiveTab('past')"
+            >
+              <span class="tab-icon">📦</span>
+              <span class="tab-label">Eski</span>
+              <span class="tab-count">({{ pastOrders.length }})</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Sub-filter chips for 'Eski' tab -->
+        @if (activeTab === 'past' && pastOrders.length > 0) {
+          <div class="past-filter-chips">
+            <button
+              type="button"
+              class="filter-chip"
+              [class.active]="pastFilterStatus === 'all'"
+              (click)="setPastFilter('all')"
+            >
+              Hammasi ({{ pastOrders.length }})
+            </button>
+            <button
+              type="button"
+              class="filter-chip chip-delivered"
+              [class.active]="pastFilterStatus === 'delivered'"
+              (click)="setPastFilter('delivered')"
+            >
+              🎉 Yetkazilgan ({{ deliveredCount }})
+            </button>
+            <button
+              type="button"
+              class="filter-chip chip-cancelled"
+              [class.active]="pastFilterStatus === 'cancelled'"
+              (click)="setPastFilter('cancelled')"
+            >
+              ✖️ Bekor qilingan ({{ cancelledCount }})
+            </button>
+          </div>
+        }
+      } @else {
+        <!-- Status Chips for 'all' mode (admin/branch manager) -->
+        <app-status-chips
+          [selectedStatus]="orderFilter.status ?? null"
+          [counts]="statusCounts"
+          (statusChange)="onStatusChipSelected($event)"
+        ></app-status-chips>
+      }
 
       <!-- Advanced Filters Panel (Search with debounce, branch, date range, payment status, sorting) -->
       <app-order-filters
@@ -106,24 +164,286 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       <app-empty-state
         *ngIf="!isLoading && !hasError && allOrders.length === 0"
         icon="🛍️"
-        title="Sizda hali buyurtmalar yo‘q"
-        description="Xarid qilishni boshlash uchun mahsulotlar katalogiga o‘ting."
-        actionText="Mahsulotlarga o‘tish"
+        title="Sizda hali buyurtmalar yo'q"
+        description="Xarid qilishni boshlash uchun mahsulotlar katalogiga o'ting."
+        actionText="Mahsulotlarga o'tish"
         (actionClick)="goToProducts()"
       ></app-empty-state>
 
-      <!-- Bo'sh holat: Agar filtr bo'yicha buyurtma topilmasa -->
+      <!-- Bo'sh holat: Faol buyurtmalar yo'q (viewMode === 'my') -->
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'active' && activeOrders.length === 0 && allOrders.length > 0) {
+        <app-empty-state
+          icon="✅"
+          title="Faol buyurtmalar yo'q"
+          description="Hozircha jarayondagi buyurtmalar mavjud emas. Eski buyurtmalarni ko'rish uchun 'Eski' tabini bosing."
+          actionText="Eski buyurtmalarni ko'rish"
+          (actionClick)="setActiveTab('past')"
+        ></app-empty-state>
+      }
+
+      <!-- Bo'sh holat: Eski buyurtmalar yo'q (viewMode === 'my') -->
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'past' && pastOrders.length === 0 && allOrders.length > 0) {
+        <app-empty-state
+          icon="📦"
+          title="Eski buyurtmalar yo'q"
+          description="Yetkazilgan yoki bekor qilingan buyurtmalar hali mavjud emas."
+          actionText="Faol buyurtmalarni ko'rish"
+          (actionClick)="setActiveTab('active')"
+        ></app-empty-state>
+      }
+
+      <!-- Bo'sh holat: Filtrlangan eski buyurtmalar yo'q -->
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'past' && pastOrders.length > 0 && filteredPastOrders.length === 0) {
+        <app-empty-state
+          icon="🔍"
+          title="Bu filtr bo'yicha buyurtma topilmadi"
+          description="Boshqa filter tanlang."
+          actionText="Hammasini ko'rsatish"
+          (actionClick)="setPastFilter('all')"
+        ></app-empty-state>
+      }
+
+      <!-- Bo'sh holat: Agar filtr bo'yicha buyurtma topilmasa (viewMode === 'all') -->
       <app-empty-state
-        *ngIf="!isLoading && !hasError && allOrders.length > 0 && paginatedOrders.length === 0"
+        *ngIf="!isLoading && !hasError && viewMode === 'all' && allOrders.length > 0 && paginatedOrders.length === 0"
         icon="🔍"
-        title="Bu filtr bo‘yicha buyurtma topilmadi"
-        description="Qidiruv yoki filtrlash shartlarini o‘zgartirib ko‘ring."
+        title="Bu filtr bo'yicha buyurtma topilmadi"
+        description="Qidiruv yoki filtrlash shartlarini o'zgartirib ko'ring."
         actionText="Filtrni tozalash"
         (actionClick)="onFilterReset()"
       ></app-empty-state>
 
-      <!-- Orders List -->
-      <div class="orders-container" *ngIf="!isLoading && !hasError && paginatedOrders.length > 0">
+      <!-- Active Orders (Full cards) - viewMode === 'my' -->
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'active' && displayedActiveOrders.length > 0) {
+        <div class="orders-container">
+          @for (order of displayedActiveOrders; track order.id) {
+            <div class="order-card card">
+              <div class="order-header">
+                <div class="order-id-block">
+                  <span class="order-number">Buyurtma #{{ order.id }}</span>
+                  <span class="order-date">{{ order.createdAt | date:'medium' }}</span>
+                </div>
+                <div class="header-right">
+                  <a
+                    *ngIf="order.companyBranchId && hasBranchCoords(order.companyBranchId)"
+                    [routerLink]="['/map']"
+                    [queryParams]="{ branch: order.companyBranchId }"
+                    class="branch-tag branch-link"
+                    title="Xaritada ko'rish"
+                    (click)="$event.stopPropagation()"
+                  >
+                    📍 {{ getBranchName(order.companyBranchId) }}
+                  </a>
+                  <span
+                    *ngIf="order.companyBranchId && !hasBranchCoords(order.companyBranchId)"
+                    class="branch-tag branch-no-coords"
+                    title="Koordinata kiritilmagan"
+                  >
+                    📍 {{ getBranchName(order.companyBranchId) }}
+                  </span>
+                  <app-status-badge [status]="order.status"></app-status-badge>
+                </div>
+              </div>
+
+              <!-- Order Timeline Progress Stepper -->
+              <div class="order-stepper-box">
+                <app-order-stepper [currentStatus]="order.status"></app-order-stepper>
+              </div>
+
+              <!-- Order Items Table -->
+              <div class="order-items-wrapper">
+                <table class="items-table" *ngIf="order.orderItems && order.orderItems.length > 0">
+                  <thead>
+                    <tr>
+                      <th>Mahsulot ID</th>
+                      <th>Nomi</th>
+                      <th class="text-center">Miqdori</th>
+                      <th class="text-right">Narxi</th>
+                      <th class="text-right">Jami</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let item of order.orderItems">
+                      <td>#{{ item.productId }}</td>
+                      <td class="item-name">{{ item.productName || ('Mahsulot #' + item.productId) }}</td>
+                      <td class="text-center">{{ item.quantity }} dona</td>
+                      <td class="text-right">{{ item.unitPrice | number:'1.0-0' }} so'm</td>
+                      <td class="text-right fw-bold">{{ (item.unitPrice * item.quantity) | number:'1.0-0' }} so'm</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div *ngIf="!order.orderItems || order.orderItems.length === 0" class="no-items-note">
+                  OrderItem ma'lumotlari mavjud emas.
+                </div>
+              </div>
+
+              <!-- Order Footer & Actions -->
+              <div class="order-footer">
+                <div class="total-wrap">
+                  <span class="total-label">Jami to'lov:</span>
+                  <span class="total-amount">{{ order.totalPrice | number:'1.0-0' }} so'm</span>
+                  <div class="payment-badge-wrap">
+                    <span
+                      class="payment-pill"
+                      [style.color]="getOrderPaymentBadge(order).color"
+                      [style.background]="getOrderPaymentBadge(order).bg"
+                    >
+                      💳 {{ getOrderPaymentBadge(order).label }}
+                    </span>
+                    <span
+                      class="rejection-note"
+                      *ngIf="isPaymentFailed(orderPayments.get(order.id)) && orderPayments.get(order.id)?.rejectionReason"
+                    >
+                      Sabab: {{ orderPayments.get(order.id)?.rejectionReason }}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="order-actions">
+                  <button
+                    *ngIf="canCustomerPay(order)"
+                    class="btn btn-primary btn-sm pay-btn"
+                    (click)="openPayModal(order)"
+                  >
+                    💳 {{ orderPayments.get(order.id) ? 'Chekni yangilash' : 'To'lov qilish' }}
+                  </button>
+                  <button
+                    *ngIf="orderPayments.get(order.id)?.chekUrl"
+                    class="btn btn-secondary btn-sm"
+                    (click)="openViewReceiptModal(order)"
+                    title="Chek rasmini ko'rish"
+                  >
+                    🧾 Chekni ko'rish
+                  </button>
+                  <a
+                    *ngIf="orderPayments.get(order.id) as paymentObj"
+                    [routerLink]="['/payments', paymentObj.id]"
+                    class="btn btn-secondary btn-sm"
+                    title="To'lov tafsiloti va chekni ko'rish"
+                  >
+                    🔎 To'lovni ko'rish
+                  </a>
+                  <button
+                    *ngIf="canCancel(order.status)"
+                    class="btn btn-danger btn-sm cancel-btn"
+                    (click)="openCancelModal(order)"
+                  >
+                    ✕ Buyurtmani bekor qilish
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Load More for Active Orders -->
+        @if (activeOrders.length > displayedActiveCount) {
+          <div class="load-more-section">
+            <div class="page-info-text">
+              {{ displayedActiveCount }} / {{ activeOrders.length }} ta buyurtma
+            </div>
+            <button type="button" class="btn btn-secondary load-more-btn" (click)="loadMoreActive()">
+              @if (activeOrders.length - displayedActiveCount >= ORDERS_PAGE_SIZE) {
+                Yana {{ ORDERS_PAGE_SIZE }} ta ko'rsatish
+              } @else {
+                Yana {{ activeOrders.length - displayedActiveCount }} ta ko'rsatish
+              }
+            </button>
+          </div>
+        }
+      }
+
+      <!-- Past Orders (Compact expandable rows) - viewMode === 'my' -->
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'past' && displayedPastOrders.length > 0) {
+        <div class="past-orders-container">
+          @for (order of displayedPastOrders; track order.id) {
+            <div class="past-order-row" [class.expanded]="expandedOrderIds.has(order.id)" [class.cancelled]="order.status === OrderStatus.Cancelled">
+              <!-- Compact Header (Always visible) -->
+              <div class="past-order-header" (click)="toggleOrderExpand(order.id)">
+                <div class="past-order-main">
+                  <span class="past-order-id">#{{ order.id }}</span>
+                  <span class="past-order-date">{{ order.createdAt | date:'dd.MM.yyyy' }}</span>
+                  <span class="past-order-items">{{ order.orderItems?.length || 0 }} ta mahsulot</span>
+                </div>
+                <div class="past-order-end">
+                  <span class="past-order-total">{{ order.totalPrice | number:'1.0-0' }} so'm</span>
+                  <app-status-badge [status]="order.status"></app-status-badge>
+                  <button type="button" class="expand-btn" [attr.aria-expanded]="expandedOrderIds.has(order.id)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Expanded Content -->
+              @if (expandedOrderIds.has(order.id)) {
+                <div class="past-order-details">
+                  <!-- Order Items -->
+                  <div class="past-items-list">
+                    @for (item of order.orderItems; track item.productId) {
+                      <div class="past-item-row">
+                        <span class="past-item-name">{{ item.productName || ('Mahsulot #' + item.productId) }}</span>
+                        <span class="past-item-qty">{{ item.quantity }} × {{ item.unitPrice | number:'1.0-0' }}</span>
+                        <span class="past-item-sum">{{ (item.unitPrice * item.quantity) | number:'1.0-0' }} so'm</span>
+                      </div>
+                    }
+                  </div>
+
+                  <!-- Footer Actions -->
+                  <div class="past-order-footer">
+                    <div class="payment-badge-wrap">
+                      <span
+                        class="payment-pill"
+                        [style.color]="getOrderPaymentBadge(order).color"
+                        [style.background]="getOrderPaymentBadge(order).bg"
+                      >
+                        💳 {{ getOrderPaymentBadge(order).label }}
+                      </span>
+                    </div>
+                    <div class="past-order-actions">
+                      <button
+                        *ngIf="canLeaveComment(order)"
+                        class="btn btn-success btn-sm comment-btn"
+                        (click)="openCommentModal(order); $event.stopPropagation()"
+                      >
+                        ⭐ Sharh qoldirish
+                      </button>
+                      <a
+                        *ngIf="orderPayments.get(order.id) as paymentObj"
+                        [routerLink]="['/payments', paymentObj.id]"
+                        class="btn btn-secondary btn-sm"
+                        (click)="$event.stopPropagation()"
+                      >
+                        🔎 To'lovni ko'rish
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Load More for Past Orders -->
+        @if (filteredPastOrders.length > displayedPastCount) {
+          <div class="load-more-section">
+            <div class="page-info-text">
+              {{ displayedPastCount }} / {{ filteredPastOrders.length }} ta buyurtma
+            </div>
+            <button type="button" class="btn btn-secondary load-more-btn" (click)="loadMorePast()">
+              @if (filteredPastOrders.length - displayedPastCount >= ORDERS_PAGE_SIZE) {
+                Yana {{ ORDERS_PAGE_SIZE }} ta ko'rsatish
+              } @else {
+                Yana {{ filteredPastOrders.length - displayedPastCount }} ta ko'rsatish
+              }
+            </button>
+          </div>
+        }
+      }
+
+      <!-- Orders List for 'all' mode (Admin/BranchManager) -->
+      <div class="orders-container" *ngIf="!isLoading && !hasError && viewMode === 'all' && paginatedOrders.length > 0">
         <div class="order-card card" *ngFor="let order of paginatedOrders">
           <div class="order-header">
             <div class="order-id-block">
@@ -853,6 +1173,375 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       background: #ffffff;
       color: #4f46e5;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Main Tabs (Faol / Eski) */
+    .main-tabs-container {
+      margin-bottom: 1.25rem;
+    }
+    .main-tabs {
+      display: inline-flex;
+      background: #f1f5f9;
+      padding: 0.35rem;
+      border-radius: 12px;
+      gap: 0.25rem;
+      border: 1px solid #e2e8f0;
+    }
+    .main-tab {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1.25rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #64748b;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .main-tab:hover {
+      color: #334155;
+      background: rgba(255, 255, 255, 0.5);
+    }
+    .main-tab.active {
+      background: #ffffff;
+      color: #4f46e5;
+      box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+    }
+    .tab-icon {
+      font-size: 1rem;
+    }
+    .tab-count {
+      font-size: 0.8rem;
+      opacity: 0.85;
+    }
+
+    /* Past Filter Chips */
+    .past-filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #e2e8f0;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .filter-chip:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .filter-chip.active {
+      background: #4f46e5;
+      color: #ffffff;
+      border-color: #4f46e5;
+    }
+    .filter-chip.chip-delivered.active {
+      background: #059669;
+      border-color: #059669;
+    }
+    .filter-chip.chip-cancelled.active {
+      background: #dc2626;
+      border-color: #dc2626;
+    }
+
+    /* Past Orders Container (Compact rows) */
+    .past-orders-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .past-order-row {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+    .past-order-row:hover {
+      border-color: #cbd5e1;
+    }
+    .past-order-row.expanded {
+      border-color: #6366f1;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+    }
+    .past-order-row.cancelled {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+    .past-order-row.cancelled.expanded {
+      border-color: #f87171;
+    }
+
+    .past-order-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      cursor: pointer;
+      gap: 1rem;
+    }
+    .past-order-main {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .past-order-id {
+      font-weight: 700;
+      color: #0f172a;
+      font-size: 0.95rem;
+    }
+    .past-order-date {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+    .past-order-items {
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .past-order-end {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .past-order-total {
+      font-weight: 700;
+      color: #4f46e5;
+      font-size: 0.95rem;
+    }
+    .expand-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: #f1f5f9;
+      border: none;
+      border-radius: 8px;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .expand-btn:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .expand-btn svg {
+      transition: transform 0.2s ease;
+    }
+    .past-order-row.expanded .expand-btn svg {
+      transform: rotate(180deg);
+    }
+
+    .past-order-details {
+      padding: 0 1.25rem 1rem;
+      border-top: 1px dashed #e2e8f0;
+      animation: slideDown 0.2s ease;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .past-items-list {
+      padding: 0.75rem 0;
+    }
+    .past-item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      font-size: 0.85rem;
+      color: #334155;
+      border-bottom: 1px dashed #f1f5f9;
+    }
+    .past-item-row:last-child {
+      border-bottom: none;
+    }
+    .past-item-name {
+      flex: 1;
+      font-weight: 500;
+    }
+    .past-item-qty {
+      color: #64748b;
+      margin: 0 1rem;
+      white-space: nowrap;
+    }
+    .past-item-sum {
+      font-weight: 600;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .past-order-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 0.75rem;
+      border-top: 1px solid #e2e8f0;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .past-order-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* Load More Section */
+    .load-more-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+      padding: 1rem;
+    }
+    .page-info-text {
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+    .load-more-btn {
+      padding: 0.65rem 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    /* Dark theme for new tabs */
+    :host-context(body.dark-theme) .main-tabs,
+    :host-context(.dark-theme) .main-tabs {
+      background: #151e32;
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .main-tab,
+    :host-context(.dark-theme) .main-tab {
+      color: #94a3b8;
+    }
+    :host-context(body.dark-theme) .main-tab:hover,
+    :host-context(.dark-theme) .main-tab:hover {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    :host-context(body.dark-theme) .main-tab.active,
+    :host-context(.dark-theme) .main-tab.active {
+      background: #1e293b;
+      color: #a5b4fc;
+    }
+
+    :host-context(body.dark-theme) .filter-chip,
+    :host-context(.dark-theme) .filter-chip {
+      background: #151e32;
+      color: #94a3b8;
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .filter-chip:hover,
+    :host-context(.dark-theme) .filter-chip:hover {
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    :host-context(body.dark-theme) .filter-chip.active,
+    :host-context(.dark-theme) .filter-chip.active {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+
+    :host-context(body.dark-theme) .past-order-row,
+    :host-context(.dark-theme) .past-order-row {
+      background: #151e32;
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .past-order-row:hover,
+    :host-context(.dark-theme) .past-order-row:hover {
+      border-color: #334155;
+    }
+    :host-context(body.dark-theme) .past-order-row.expanded,
+    :host-context(.dark-theme) .past-order-row.expanded {
+      border-color: #6366f1;
+    }
+    :host-context(body.dark-theme) .past-order-row.cancelled,
+    :host-context(.dark-theme) .past-order-row.cancelled {
+      background: #1c1917;
+      border-color: #7f1d1d;
+    }
+    :host-context(body.dark-theme) .past-order-id,
+    :host-context(.dark-theme) .past-order-id {
+      color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .past-order-details,
+    :host-context(.dark-theme) .past-order-details {
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .past-item-row,
+    :host-context(.dark-theme) .past-item-row {
+      color: #cbd5e1;
+      border-color: #1e293b;
+    }
+    :host-context(body.dark-theme) .past-item-sum,
+    :host-context(.dark-theme) .past-item-sum {
+      color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .past-order-footer,
+    :host-context(.dark-theme) .past-order-footer {
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .expand-btn,
+    :host-context(.dark-theme) .expand-btn {
+      background: #1e293b;
+      color: #94a3b8;
+    }
+    :host-context(body.dark-theme) .expand-btn:hover,
+    :host-context(.dark-theme) .expand-btn:hover {
+      background: #334155;
+      color: #e2e8f0;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 375px) {
+      .main-tabs {
+        width: 100%;
+      }
+      .main-tab {
+        flex: 1;
+        justify-content: center;
+        padding: 0.55rem 0.75rem;
+        font-size: 0.825rem;
+      }
+      .tab-icon {
+        display: none;
+      }
+      .past-filter-chips {
+        gap: 0.4rem;
+      }
+      .filter-chip {
+        padding: 0.4rem 0.7rem;
+        font-size: 0.75rem;
+      }
+      .past-order-header {
+        padding: 0.85rem 1rem;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .past-order-end {
+        width: 100%;
+        justify-content: space-between;
+        margin-top: 0.5rem;
+      }
+      .past-order-main {
+        gap: 0.5rem;
+      }
     }
 
     .filter-bar {
@@ -2018,6 +2707,43 @@ export class OrdersListComponent implements OnInit {
   commentContent = '';
   isSubmittingComment = false;
 
+  // === NEW TAB SYSTEM STATE (Faol / Eski) ===
+  readonly ORDERS_PAGE_SIZE = 10;
+  readonly ACTIVE_STATUSES = [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Shipped];
+  readonly PAST_STATUSES = [OrderStatus.Delivered, OrderStatus.Cancelled];
+
+  activeTab: 'active' | 'past' = 'active';
+  activeOrders: Order[] = [];
+  pastOrders: Order[] = [];
+  pastFilterStatus: 'all' | 'delivered' | 'cancelled' = 'all';
+  displayedActiveCount = 10;
+  displayedPastCount = 10;
+  expandedOrderIds: Set<number> = new Set();
+
+  get filteredPastOrders(): Order[] {
+    if (this.pastFilterStatus === 'all') return this.pastOrders;
+    if (this.pastFilterStatus === 'delivered') {
+      return this.pastOrders.filter(o => o.status === OrderStatus.Delivered);
+    }
+    return this.pastOrders.filter(o => o.status === OrderStatus.Cancelled);
+  }
+
+  get displayedActiveOrders(): Order[] {
+    return this.activeOrders.slice(0, this.displayedActiveCount);
+  }
+
+  get displayedPastOrders(): Order[] {
+    return this.filteredPastOrders.slice(0, this.displayedPastCount);
+  }
+
+  get deliveredCount(): number {
+    return this.pastOrders.filter(o => o.status === OrderStatus.Delivered).length;
+  }
+
+  get cancelledCount(): number {
+    return this.pastOrders.filter(o => o.status === OrderStatus.Cancelled).length;
+  }
+
   get showBranchDropdown(): boolean {
     return !this.authState.isBranchManager();
   }
@@ -2026,29 +2752,91 @@ export class OrdersListComponent implements OnInit {
     return this.authState.isSuperAdmin();
   }
 
-  ngOnInit(): void { 
+  ngOnInit(): void {
     this.parseFiltersFromUrl();
-    this.loadBranches(); 
+    this.loadBranches();
     this.loadCompanies();
     this.loadCustomers();
 
-    if (this.authState.isAdminMode() || this.authState.isAdminRole()) { 
-      this.viewMode = 'all'; 
-    } 
-    if (this.authState.isBranchManager()) { 
-      this.orderFilter.branchId = this.authState.userBranchId(); 
-      this.viewMode = 'all'; 
+    if (this.authState.isAdminMode() || this.authState.isAdminRole()) {
+      this.viewMode = 'all';
+    }
+    if (this.authState.isBranchManager()) {
+      this.orderFilter.branchId = this.authState.userBranchId();
+      this.viewMode = 'all';
     }
 
     // Subscribe to query params changes (back/forward navigation support)
     this.route.queryParams.subscribe(params => {
       this.applyParamsToFilter(params);
+      // Handle tab param for 'my' mode
+      if (this.viewMode === 'my') {
+        const tab = params['tab'];
+        if (tab === 'past' || tab === 'active') {
+          this.activeTab = tab;
+        }
+      }
       if (this.allOrders.length > 0) {
         this.applyFilters(false);
       }
     });
 
-    this.loadOrders(); 
+    this.loadOrders();
+  }
+
+  // === TAB SYSTEM METHODS ===
+  setActiveTab(tab: 'active' | 'past'): void {
+    this.activeTab = tab;
+    // Reset display counts when switching tabs
+    if (tab === 'active') {
+      this.displayedActiveCount = this.ORDERS_PAGE_SIZE;
+    } else {
+      this.displayedPastCount = this.ORDERS_PAGE_SIZE;
+      this.pastFilterStatus = 'all';
+    }
+    this.syncTabToUrl();
+  }
+
+  setPastFilter(status: 'all' | 'delivered' | 'cancelled'): void {
+    this.pastFilterStatus = status;
+    this.displayedPastCount = this.ORDERS_PAGE_SIZE;
+  }
+
+  loadMoreActive(): void {
+    this.displayedActiveCount += this.ORDERS_PAGE_SIZE;
+  }
+
+  loadMorePast(): void {
+    this.displayedPastCount += this.ORDERS_PAGE_SIZE;
+  }
+
+  toggleOrderExpand(orderId: number): void {
+    if (this.expandedOrderIds.has(orderId)) {
+      this.expandedOrderIds.delete(orderId);
+    } else {
+      this.expandedOrderIds.add(orderId);
+    }
+  }
+
+  private splitOrdersByType(): void {
+    this.activeOrders = this.allOrders.filter(o => this.ACTIVE_STATUSES.includes(o.status));
+    this.pastOrders = this.allOrders.filter(o => this.PAST_STATUSES.includes(o.status));
+
+    // Auto-switch to 'past' tab if no active orders but has past orders
+    if (this.activeOrders.length === 0 && this.pastOrders.length > 0) {
+      this.activeTab = 'past';
+    }
+  }
+
+  private syncTabToUrl(): void {
+    if (this.viewMode !== 'my') return;
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: this.activeTab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   private parseFiltersFromUrl(): void {
@@ -2249,21 +3037,26 @@ export class OrdersListComponent implements OnInit {
         this.orders = [];
         this.filteredOrders = [];
         this.paginatedOrders = [];
+        this.activeOrders = [];
+        this.pastOrders = [];
         return;
       }
-      // Server-side pagination bilan buyurtmalarni olish
-      this.orderService.getMyOrdersPaged(this.currentPage, this.pageSize).subscribe({
+      // Load all orders at once (PageSize=50) for client-side tab splitting
+      this.orderService.getMyOrdersPaged(1, 50).subscribe({
         next: (pagedResult) => {
           this.allOrders = pagedResult.items || [];
           this.orders = this.allOrders;
           this.paginatedOrders = this.allOrders;
           this.filteredOrders = this.allOrders;
 
-          // Pagination state'ni yangilash
+          // Pagination state (for backwards compat)
           this.totalItems = pagedResult.totalCount || 0;
-          this.totalPages = pagedResult.totalPages || 1;
-          this.hasPreviousPage = pagedResult.hasPreviousPage || false;
-          this.hasNextPage = pagedResult.hasNextPage || false;
+          this.totalPages = 1;
+          this.hasPreviousPage = false;
+          this.hasNextPage = false;
+
+          // Split orders into active/past for the new tab system
+          this.splitOrdersByType();
 
           this.isLoading = false;
           this.statusCounts = this.orderService.computeStatusCounts(this.allOrders);
@@ -2278,6 +3071,8 @@ export class OrdersListComponent implements OnInit {
           this.orders = [];
           this.filteredOrders = [];
           this.paginatedOrders = [];
+          this.activeOrders = [];
+          this.pastOrders = [];
           this.totalItems = 0;
           this.totalPages = 0;
           this.hasPreviousPage = false;

@@ -20,7 +20,8 @@ export interface CreateProductDto {
   description: string;
   price: number;
   categoryId: number;
-  image: string;
+  image?: string;
+  imageFile?: File;
   quantity: number;
   companyBranchid: number;
 }
@@ -31,7 +32,8 @@ export interface UpdateProductDto {
   description: string;
   price: number;
   categoryId: number;
-  image: string;
+  image?: string;
+  imageFile?: File;
   quantity: number;
   companyBranchId: number;
 }

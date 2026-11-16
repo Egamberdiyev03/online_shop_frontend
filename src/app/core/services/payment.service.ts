@@ -116,36 +116,34 @@ export class PaymentService {
     );
   }
 
-  // 5. Admin to'lovni tasdiqlashi (raw API)
-  confirmPayment(paymentId: number, adminId: number): Observable<Payment> {
+  // 5. Admin to'lovni tasdiqlashi (raw API) - adminId backendda tokendan olinadi
+  confirmPayment(paymentId: number, _adminId?: number): Observable<Payment> {
     return this.http.post<ResponseModel<Payment> | Payment>(
-      `${this.apiUrl}/confirm/${paymentId}?adminId=${adminId}`,
+      `${this.apiUrl}/confirm/${paymentId}`,
       null
     ).pipe(
       map(res => this.normalizePayment(unwrapResult(res)))
     );
   }
 
-  // 6. Admin to'lovni rad etishi (raw API)
-  rejectPayment(dto: RejectPaymentDto, adminId: number): Observable<Payment> {
+  // 6. Admin to'lovni rad etishi (raw API) - adminId backendda tokendan olinadi
+  rejectPayment(dto: RejectPaymentDto, _adminId?: number): Observable<Payment> {
     return this.http.post<ResponseModel<Payment> | Payment>(
-      `${this.apiUrl}/reject?adminId=${adminId}`,
+      `${this.apiUrl}/reject`,
       dto
     ).pipe(
       map(res => this.normalizePayment(unwrapResult(res)))
     );
   }
 
-  // 7. Qulay confirm(id) - adminId ni avtomatik aniqlaydi
+  // 7. Qulay confirm(id) - adminId backendda tokendan olinadi
   confirm(id: number): Observable<Payment> {
-    const adminId = this.getCurrentUserId();
-    return this.confirmPayment(id, adminId);
+    return this.confirmPayment(id);
   }
 
-  // 8. Qulay reject(id, reason) - adminId ni avtomatik aniqlaydi
+  // 8. Qulay reject(id, reason) - adminId backendda tokendan olinadi
   reject(id: number, reason: string): Observable<Payment> {
-    const adminId = this.getCurrentUserId();
-    return this.rejectPayment({ paymentId: id, reason }, adminId);
+    return this.rejectPayment({ paymentId: id, reason });
   }
 
   // Mijoz uchun o'z to'lovlarini olish - OPTIMIZED: 1 ta so'rov (N+1 muammo hal qilindi)

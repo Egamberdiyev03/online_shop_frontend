@@ -1,10 +1,13 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, signal,PLATFORM_ID } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map, tap, of, forkJoin, catchError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Cart, CartItem, CreateCartDto } from '../models/cart.model';
 import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
 import { NotificationService } from './notification.service';
+import { AuthStateService } from './auth-state.service';
+//import { inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 
 @Injectable({
   providedIn: 'root'
@@ -12,8 +15,12 @@ import { NotificationService } from './notification.service';
 export class CartService {
   private http = inject(HttpClient);
   private notification = inject(NotificationService);
+  private authState = inject(AuthStateService);
   private apiUrl = `${environment.apiUrl}/Cart`;
   private readonly GUEST_CART_KEY = 'online_shop_guest_cart';
+
+  private readonly platformId = inject(PLATFORM_ID);
+private readonly isBrowser = isPlatformBrowser(this.platformId);
 
   // Signals-based cart state for instant reactive UI across header, cart page, and buttons
   currentCart = signal<Cart | null>(null);
@@ -23,6 +30,7 @@ export class CartService {
   isLoading = signal<boolean>(false);
 
   private getGuestCart(): CartItem[] {
+    if (!this.isBrowser) return []; 
     const raw = localStorage.getItem(this.GUEST_CART_KEY);
     if (!raw) return [];
     try {
@@ -42,9 +50,10 @@ export class CartService {
     return items.reduce((sum, item) => sum + (item.quantity || 1), 0);
   }
 
-  getByCustomerId(customerId: number): Observable<Cart> {
+  getByCustomerId(customerId?: number): Observable<Cart> {
+    const id = (customerId !== undefined && customerId !== null) ? customerId : this.authState.currentCustomerId();
     // Agar mijoz tizimga kirmagan bo'lsa (mehmon bo'lsa)
-    if (!customerId || customerId <= 0) {
+    if (!id || id <= 0) {
       const guestItems = this.getGuestCart();
       const mockCart: Cart = {
         id: 0,
@@ -60,7 +69,7 @@ export class CartService {
     }
 
     this.isLoading.set(true);
-    return this.http.get<ResponseModel<Cart> | Cart>(`${this.apiUrl}/GetByCustomerIdCart?UserId=${customerId}`).pipe(
+    return this.http.get<ResponseModel<Cart> | Cart>(`${this.apiUrl}/GetByUserIdCart`).pipe(
       map(res => unwrapResult(res)),
       tap(cart => {
         this.isLoading.set(false);
@@ -72,9 +81,10 @@ export class CartService {
     );
   }
 
-  addItem(customerId: number, productId: number, quantity: number = 1): Observable<boolean> {
+  addItem(customerId?: number, productId: number = 0, quantity: number = 1): Observable<boolean> {
+    const id = (customerId !== undefined && customerId !== null) ? customerId : this.authState.currentCustomerId();
     // Agar mijoz tizimga kirmagan bo'lsa (mehmon), savatni localStorage'da saqlaymiz
-    if (!customerId || customerId <= 0) {
+    if (!id || id <= 0) {
       const items = this.getGuestCart();
       const existing = items.find(i => i.productId === productId);
       if (existing) {
@@ -91,9 +101,9 @@ export class CartService {
       return of(true);
     }
 
-    // Tizimga kirgan mijoz uchun backend API
+    // Tizimga kirgan mijoz uchun backend API (userId tokendan olinadi)
     return this.http.post<ResponseModel<boolean> | boolean>(
-      `${this.apiUrl}/AddItemtoCart?UserId=${customerId}&productId=${productId}&quantity=${quantity}`,
+      `${this.apiUrl}/AddItemtoCart?productId=${productId}&quantity=${quantity}`,
       null
     ).pipe(
       map(res => {
@@ -114,18 +124,19 @@ export class CartService {
         return true;
       }),
       tap(() => {
-        this.getByCustomerId(customerId).subscribe({ error: () => {} });
+        this.getByCustomerId(id).subscribe({ error: () => {} });
       })
     );
   }
 
   // addToCart alias
-  addToCart(customerId: number, productId: number, quantity: number = 1): Observable<boolean> {
+  addToCart(customerId?: number, productId: number = 0, quantity: number = 1): Observable<boolean> {
     return this.addItem(customerId, productId, quantity);
   }
 
-  updateQuantity(customerId: number, productId: number, quantity: number): Observable<boolean> {
-    if (!customerId || customerId <= 0) {
+  updateQuantity(customerId?: number, productId: number = 0, quantity: number = 1): Observable<boolean> {
+    const id = (customerId !== undefined && customerId !== null) ? customerId : this.authState.currentCustomerId();
+    if (!id || id <= 0) {
       const items = this.getGuestCart().map(item =>
         item.productId === productId ? { ...item, quantity } : item
       );
@@ -140,7 +151,7 @@ export class CartService {
     this.cartItemsCount.set(this.calculateCount(this.cartItems()));
 
     return this.http.put<ResponseModel<boolean> | boolean>(
-      `${this.apiUrl}/Update?UserId=${customerId}&productId=${productId}&quantity=${quantity}`,
+      `${this.apiUrl}/Update?productId=${productId}&quantity=${quantity}`,
       null
     ).pipe(
       map(res => {
@@ -157,8 +168,9 @@ export class CartService {
     );
   }
 
-  removeItem(customerId: number, productId: number): Observable<boolean> {
-    if (!customerId || customerId <= 0) {
+  removeItem(customerId?: number, productId: number = 0): Observable<boolean> {
+    const id = (customerId !== undefined && customerId !== null) ? customerId : this.authState.currentCustomerId();
+    if (!id || id <= 0) {
       const items = this.getGuestCart().filter(item => item.productId !== productId);
       this.saveGuestCart(items);
       return of(true);
@@ -169,7 +181,7 @@ export class CartService {
     this.cartItemsCount.set(this.calculateCount(this.cartItems()));
 
     return this.http.delete<ResponseModel<boolean> | boolean>(
-      `${this.apiUrl}/RemoveItemfromCart?UserId=${customerId}&productId=${productId}`
+      `${this.apiUrl}/RemoveItemfromCart?productId=${productId}`
     ).pipe(
       map(res => {
         if (res && typeof res === 'object') {
@@ -199,7 +211,7 @@ export class CartService {
   }
 
   // Tizimga kirganda mehmondagi savatni foydalanuvchiga ko'chirish
-  syncGuestCartToUser(userId: number): Observable<boolean> {
+  syncGuestCartToUser(_userId?: number): Observable<boolean> {
     const guestItems = this.getGuestCart();
     if (!guestItems || guestItems.length === 0) {
       return of(true);
@@ -207,7 +219,7 @@ export class CartService {
 
     const requests = guestItems.map(item =>
       this.http.post<any>(
-        `${this.apiUrl}/AddItemtoCart?UserId=${userId}&productId=${item.productId}&quantity=${item.quantity}`,
+        `${this.apiUrl}/AddItemtoCart?productId=${item.productId}&quantity=${item.quantity}`,
         null
       )
     );

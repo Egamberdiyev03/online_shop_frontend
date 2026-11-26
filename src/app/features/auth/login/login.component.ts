@@ -236,7 +236,7 @@ function passwordMatchValidator(group: AbstractControl): ValidationErrors | null
 
           <svg class="tg-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
 
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.12.03-1.99 1.27-5.63 3.73-.53.36-1.02.54-1.45.53-.48-.01-1.4-.27-2.09-.49-.84-.27-1.51-.42-1.45-.89.03-.25.38-.51 1.07-.78 4.19-1.82 6.99-3.03 8.4-3.61 4-.1.65 1.7.83 2.08.85.08.01.26.01.38-.08.08-.06.13-.15.15-.24.03-.13.04-.37.04-.37z"/>
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.12.03-1.99 1.27-5.63 3.73-.53.36-1.02.54-1.45.53-.48-.01-1.4-.27-2.09-.49-.84-.27-1.51-.42-1.45-.89.03-.25.38-.51 1.07-.78 4.19-1.82 6.99-3.03 8.4-3.61 1.68-.7 2.86-.91 3.55-.64.39.15.6.46.58.65z"/>
 
           </svg>
 
@@ -1612,7 +1612,11 @@ export class LoginComponent implements OnDestroy {
         this.authService.telegramLoginByCode(code).subscribe({
           next: () => {
             this.isLoading = false;
-            this.router.navigateByUrl(params['returnUrl'] || '/products');
+            if (this.authState.isCurier()) {
+              this.router.navigateByUrl('/curier');
+            } else {
+              this.router.navigateByUrl(params['returnUrl'] || '/products');
+            }
           },
           error: (err) => {
             this.isLoading = false;
@@ -1631,7 +1635,11 @@ export class LoginComponent implements OnDestroy {
 
         this.notification.success('Xush kelibsiz! Telegram orqali muvaffaqiyatli kirdingiz.');
 
-        this.router.navigateByUrl(params['returnUrl'] || '/products');
+        if (this.authState.isCurier()) {
+          this.router.navigateByUrl('/curier');
+        } else {
+          this.router.navigateByUrl(params['returnUrl'] || '/products');
+        }
 
         return;
 
@@ -1714,13 +1722,11 @@ export class LoginComponent implements OnDestroy {
         this.isLoading = false;
 
         if (this.authState.isAdminRole()) {
-
           this.router.navigateByUrl('/admin');
-
+        } else if (this.authState.isCurier()) {
+          this.router.navigateByUrl('/curier');
         } else {
-
           this.router.navigateByUrl(this.returnUrl || '/products');
-
         }
 
       },

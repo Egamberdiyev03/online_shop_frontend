@@ -19,8 +19,9 @@ import { CommonModule } from '@angular/common';
         <span class="stat-unit" *ngIf="unit">{{ unit }}</span>
       </div>
 
-      <div class="card-footer-row">
+      <div class="card-footer-row" *ngIf="growth !== null || timeframe">
         <span 
+          *ngIf="growth !== null && growth !== undefined"
           class="trend-pill" 
           [class.trend-up]="growth >= 0" 
           [class.trend-down]="growth < 0"
@@ -28,7 +29,7 @@ import { CommonModule } from '@angular/common';
           <span class="trend-arrow">{{ growth >= 0 ? '↑' : '↓' }}</span>
           <span class="trend-num">{{ Math.abs(growth) }}%</span>
         </span>
-        <span class="timeframe-text">{{ timeframe }}</span>
+        <span class="timeframe-text" *ngIf="timeframe">{{ timeframe }}</span>
       </div>
     </div>
   `,
@@ -173,7 +174,7 @@ import { CommonModule } from '@angular/common';
 
     .timeframe-text {
       font-size: 0.75rem;
-      color: #94a3b8;
+      color: #64748b;
     }
 
     /* Dark Mode */
@@ -266,8 +267,8 @@ export class StatCardComponent {
   @Input({ required: true }) label!: string;
   @Input({ required: true }) value!: string | number;
   @Input() unit?: string;
-  @Input() growth: number = 0;
-  @Input() timeframe: string = 'this month';
+  @Input() growth: number | null = 0;
+  @Input() timeframe: string = '';
   @Input() icon: string = '📊';
   @Input() theme: 'blue' | 'green' | 'emerald' | 'amber' | 'purple' | 'red' = 'blue';
   @Input() isClickable: boolean = false;

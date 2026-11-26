@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { UserNotificationService } from '../../core/services/user-notification.service';
 import { TelegramService } from '../../core/services/telegram.service';
-import { NotificationDto, formatNotificationTime } from '../../core/models/notification.model';
+import { NotificationDto, NotificationType, formatNotificationTime, getNotificationIcon } from '../../core/models/notification.model';
 
 @Component({
   selector: 'app-notifications-list',
@@ -75,6 +75,9 @@ import { NotificationDto, formatNotificationTime } from '../../core/models/notif
         >
           <!-- Unread Indicator -->
           <span class="unread-dot" *ngIf="!item.isRead" aria-label="O'qilmagan"></span>
+
+          <!-- Icon -->
+          <span class="notification-icon" aria-hidden="true">{{ getIcon(item.type) }}</span>
 
           <!-- Content -->
           <div class="notification-content">
@@ -250,6 +253,13 @@ import { NotificationDto, formatNotificationTime } from '../../core/models/notif
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+
+    .notification-icon {
+      font-size: 20px;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 2px;
     }
 
     .notification-card {
@@ -534,6 +544,10 @@ export class NotificationsListComponent implements OnInit, OnDestroy {
 
   hasLink(item: NotificationDto): boolean {
     return !!(item.link || item.relatedEntityId);
+  }
+
+  getIcon(type: NotificationType): string {
+    return getNotificationIcon(type);
   }
 
   trackById(index: number, item: NotificationDto): number {

@@ -118,6 +118,8 @@ export interface PaymentSummary {
   totalCount: number;
   totalAmount: number;
   pendingCount: number;
+  pendingCheckCount?: number;
+  cashPendingCount?: number;
   pendingAmount: number;
   completedCount: number;
   completedAmount: number;
@@ -125,6 +127,14 @@ export interface PaymentSummary {
   failedAmount: number;
   cancelledCount: number;
   cancelledAmount: number;
+}
+
+export function isValidDisplayDate(value?: string | Date | null): boolean {
+  if (!value) return false;
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (raw.startsWith('0001-01-01')) return false;
+  const date = value instanceof Date ? value : new Date(raw);
+  return !isNaN(date.getTime()) && date.getFullYear() > 1970;
 }
 
 export interface PaymentFilter {
@@ -160,9 +170,7 @@ export interface PagedQuery {
 
 export interface CreatePaymentDto {
   orderId: number;
-  userId: number;
-  amount: number;
-  paymentMethod?: string;
+  paymentMethod: 'Cash' | 'CardTransfer' | string;
   chekUrl?: string;
   transactionNote?: string;
 }

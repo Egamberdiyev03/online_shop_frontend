@@ -31,7 +31,7 @@ export interface AuthResponseDto {
   token: string;
   email: string;
   name: string;
-  role: 'Customer' | 'BranchManager' | 'CompanyAdmin' | 'SuperAdmin' | string;
+  role: 'Customer' | 'Curier' | 'BranchAdmin' | 'BranchManager' | 'CompanyAdmin' | 'SuperAdmin' | string;
   companyId?: number | null;
   companyBranchId?: number | null;
   expiresAt: string;

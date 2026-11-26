@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterModule, Router, ActivatedRoute } from '@angular/router';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService } from '../../../core/services/auth.service';
+import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
 
 @Component({
@@ -276,6 +277,7 @@ import { NotificationService } from '../../../core/services/notification.service
 export class ConfirmEmailComponent implements OnInit {
   private fb = inject(FormBuilder);
   private authService = inject(AuthService);
+  private authState = inject(AuthStateService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private notification = inject(NotificationService);
@@ -332,7 +334,7 @@ export class ConfirmEmailComponent implements OnInit {
       next: () => {
         this.isLoading = false;
         // User session already stored in authService.confirmEmail
-        this.router.navigate(['/products']);
+        this.router.navigate([this.authState.isCurier() ? '/curier' : '/products']);
       },
       error: (err) => {
         this.isLoading = false;

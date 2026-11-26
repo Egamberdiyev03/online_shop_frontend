@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { PaymentService } from '../../../core/services/payment.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
-import { PaymentDetails, PaymentStatus } from '../../../core/models/payment.model';
+import { PaymentDetails, PaymentStatus, isValidDisplayDate } from '../../../core/models/payment.model';
 import { OrderStatus, OrderStatusLabels } from '../../../core/models/order.model';
 import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-status-badge/payment-status-badge.component';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
@@ -48,13 +48,13 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge/st
               <h1 class="page-title">To‘lov #{{ payment.id }}</h1>
               <app-payment-status-badge [status]="payment.status"></app-payment-status-badge>
             </div>
-            <span class="creation-date">
-              📅 Yaratilgan sana: {{ payment.createdAt | date:'dd-MMMM yyyy, HH:mm' }}
+            <span class="creation-date" *ngIf="isValidDate(payment.createdAt)">
+              📅 Yaratilgan sana: {{ payment.createdAt | date:'dd.MM.yyyy HH:mm' }}
             </span>
           </div>
 
-          <!-- Top Actions (Admin buttons) -->
-          <div class="header-right" *ngIf="isAdminView && payment.status === PaymentStatus.Pending">
+          <!-- Top Actions (Admin buttons — Cash to'lovlar kuryer orqali yig'iladi) -->
+          <div class="header-right" *ngIf="isAdminView && payment.status === PaymentStatus.Pending && payment.paymentMethod !== 'Cash'">
             <button 
               type="button" 
               class="btn btn-danger action-btn" 
@@ -159,6 +159,13 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge/st
 
                 <!-- Chek yuklanmagan bo'lsa -->
                 <ng-template #noReceiptBlock>
+                  <div class="no-receipt-box" *ngIf="payment.paymentMethod === 'Cash'; else cardNoReceiptBlock">
+                    <span class="no-receipt-icon">💵</span>
+                    <span class="no-receipt-text">
+                      {{ isAdminView ? 'Naqd to‘lov — buyurtma yetkazilganda kuryer pulni yig‘adi.' : 'Naqd to‘lov tanlangan — buyurtma yetkazilganda pulni kuryerga topshirasiz.' }}
+                    </span>
+                  </div>
+                  <ng-template #cardNoReceiptBlock>
                   <div class="no-receipt-box">
                     <span class="no-receipt-icon">📄</span>
                     <span class="no-receipt-text">Ushbu to‘lov uchun chek fayli biriktirilmagan</span>
@@ -197,6 +204,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge/st
                       </button>
                     </div>
                   </div>
+                  </ng-template>
                 </ng-template>
               </div>
             </div>
@@ -205,7 +213,7 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge/st
             <div class="content-card" *ngIf="payment.order">
               <div class="card-header space-between">
                 <h3 class="card-title">📦 Bog‘langan Buyurtma #{{ payment.order.id }}</h3>
-                <a [routerLink]="['/orders']" class="btn btn-sm btn-secondary view-order-link">
+                <a [routerLink]="['/orders']" [queryParams]="{ orderId: payment.order.id }" class="btn btn-sm btn-secondary view-order-link">
                   Buyurtmalarga o‘tish &rarr;
                 </a>
               </div>
@@ -333,21 +341,31 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge/st
                     <div class="timeline-marker">✓</div>
                     <div class="timeline-content">
                       <span class="timeline-title">To‘lov yaratildi</span>
-                      <span class="timeline-time">{{ payment.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
+                      <span class="timeline-time" *ngIf="isValidDate(payment.createdAt)">{{ payment.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
                       <p class="timeline-desc">Buyurtma uchun to‘lov hisobi ochildi.</p>
                     </div>
                   </div>
 
-                  <!-- Step 2: Chek yuborildi -->
-                  <div class="timeline-step" [class.done]="!!payment.chekUrl">
-                    <div class="timeline-marker">{{ payment.chekUrl ? '✓' : '•' }}</div>
+                  <!-- Step 2: Chek yuborildi yoki Naqd -->
+                  <div class="timeline-step" [class.done]="payment.paymentMethod === 'Cash' ? payment.status === PaymentStatus.Completed : !!payment.chekUrl">
+                    <div class="timeline-marker">{{ (payment.paymentMethod === 'Cash' ? payment.status === PaymentStatus.Completed : !!payment.chekUrl) ? '✓' : '•' }}</div>
                     <div class="timeline-content">
-                      <span class="timeline-title">
-                        {{ payment.chekUrl ? 'To‘lov cheki biriktirildi' : 'To‘lov cheki kutilmoqda' }}
-                      </span>
-                      <p class="timeline-desc">
-                        {{ payment.chekUrl ? 'Chek serverga muvaffaqiyatli yuklangan.' : 'Mijoz to‘lov chekini yuborishi lozim.' }}
-                      </p>
+                      <ng-container *ngIf="payment.paymentMethod === 'Cash'; else cardCheckStep">
+                        <span class="timeline-title">
+                          {{ payment.status === PaymentStatus.Completed ? 'Naqd pul kuryerga topshirildi' : 'Kuryerga naqd to‘lov kutilmoqda' }}
+                        </span>
+                        <p class="timeline-desc">
+                          {{ payment.status === PaymentStatus.Completed ? 'Kuryer buyurtma uchun naqd to‘lovni qabul qildi.' : 'Buyurtma yetkazilganda kuryerga naqd to‘lanadi.' }}
+                        </p>
+                      </ng-container>
+                      <ng-template #cardCheckStep>
+                        <span class="timeline-title">
+                          {{ payment.chekUrl ? 'To‘lov cheki biriktirildi' : 'To‘lov cheki kutilmoqda' }}
+                        </span>
+                        <p class="timeline-desc">
+                          {{ payment.chekUrl ? 'Chek serverga muvaffaqiyatli yuklangan.' : 'Mijoz to‘lov chekini yuborishi lozim.' }}
+                        </p>
+                      </ng-template>
                     </div>
                   </div>
 
@@ -362,9 +380,9 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge/st
                     </div>
                     <div class="timeline-content">
                       <span class="timeline-title">
-                        {{ payment.status === PaymentStatus.Completed ? 'To‘lov tasdiqlandi' : (payment.status === PaymentStatus.Failed ? 'To‘lov rad etildi' : 'Moderatsiya kutilmoqda') }}
+                        {{ payment.status === PaymentStatus.Completed ? 'To‘lov tasdiqlandi' : (payment.status === PaymentStatus.Failed ? 'To‘lov rad etildi' : (payment.paymentMethod === 'Cash' ? 'Kuryer / mudir tasdig‘i kutilmoqda' : 'Moderatsiya kutilmoqda')) }}
                       </span>
-                      <span class="timeline-time" *ngIf="payment.confirmedAt">
+                      <span class="timeline-time" *ngIf="isValidDate(payment.confirmedAt)">
                         {{ payment.confirmedAt | date:'dd.MM.yyyy HH:mm' }}
                       </span>
                       <p class="timeline-desc" *ngIf="payment.confirmedByName">
@@ -428,6 +446,9 @@ import { StatusBadgeComponent } from '../../../shared/components/status-badge/st
           <div class="modal-body" *ngIf="payment">
             <p class="modal-prompt">
               To‘lovni rad etish sababini kiriting (mijozga ko‘rinadi):
+            </p>
+            <p style="font-size: 0.85rem; color: #b91c1c; background: #fee2e2; padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;">
+              ⚠️ Diqqat: To‘lov rad etilsa, buyurtma avtomatik bekor qilinadi va mahsulotlar omborga qaytariladi.
             </p>
             <textarea 
               class="form-control" 
@@ -1058,6 +1079,7 @@ export class PaymentDetailComponent implements OnInit {
 
   public PaymentStatus = PaymentStatus;
   public OrderStatus = OrderStatus;
+  isValidDate = isValidDisplayDate;
 
   paymentId = 0;
   payment: PaymentDetails | null = null;
@@ -1236,8 +1258,6 @@ export class PaymentDetailComponent implements OnInit {
         // Now re-submit or link payment with receipt
         this.paymentService.createPayment({
           orderId: this.payment!.orderId,
-          userId: this.payment!.customer?.id || this.authState.currentCustomerId() || 0,
-          amount: this.payment!.amount,
           paymentMethod: this.payment!.paymentMethod || 'CardTransfer',
           chekUrl: chekUrl,
           transactionNote: this.payment!.transactionNote

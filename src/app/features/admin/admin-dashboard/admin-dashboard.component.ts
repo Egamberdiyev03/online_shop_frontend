@@ -6,7 +6,7 @@ import { ProductService } from '../../../core/services/product.service';
 import { OrderService } from '../../../core/services/order.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
-import { Order, OrderStatus } from '../../../core/models/order.model';
+import { Order, OrderStatus, parseOrderStatus } from '../../../core/models/order.model';
 import { Product } from '../../../core/models/product.model';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
 import { StatCardComponent } from '../../../shared/components/dashboard/stat-card/stat-card.component';
@@ -63,8 +63,8 @@ export interface TopProductItem {
           [label]="productsCardLabel"
           [value]="totalProducts"
           unit="ta tovar"
-          [growth]="12"
-          timeframe="this month"
+          [growth]="null"
+          timeframe="Aktiv katalog"
           icon="📦"
           theme="blue"
         ></app-stat-card>
@@ -74,8 +74,8 @@ export interface TopProductItem {
           [label]="ordersStatLabel"
           [value]="totalOrders"
           unit="ta buyurtma"
-          [growth]="8"
-          timeframe="this week"
+          [growth]="null"
+          timeframe="Barcha buyurtmalar"
           icon="📋"
           theme="green"
         ></app-stat-card>
@@ -85,8 +85,8 @@ export interface TopProductItem {
           [label]="revenueCardLabel"
           [value]="formattedRevenue"
           unit="so'm"
-          [growth]="23"
-          timeframe="this month"
+          [growth]="null"
+          timeframe="Jami tushum"
           icon="💰"
           theme="emerald"
         ></app-stat-card>
@@ -95,8 +95,8 @@ export interface TopProductItem {
         <app-stat-card
           [label]="statsFirstCardLabel"
           [value]="statsFirstCardValue"
-          [growth]="5"
-          timeframe="this month"
+          [growth]="null"
+          timeframe="Joriy holat"
           [icon]="statsFirstCardIcon"
           theme="purple"
         ></app-stat-card>
@@ -165,6 +165,7 @@ export interface TopProductItem {
                   <span class="prod-revenue">{{ prod.totalRevenue | number:'1.0-0' }} so'm</span>
                 </div>
               </div>
+              <div *ngIf="topProducts.length === 0" class="empty-table-cell">Hozircha sotuvlar ma'lumoti yo'q</div>
             </div>
           </div>
         </div>
@@ -202,7 +203,7 @@ export interface TopProductItem {
                     <app-status-badge [status]="order.status" [showIcon]="true"></app-status-badge>
                   </td>
                   <td class="text-right">
-                    <a [routerLink]="['/orders']" [queryParams]="{ search: order.id }" class="table-action-btn" title="Ko'rish">
+                    <a [routerLink]="['/orders']" [queryParams]="{ orderId: order.id }" class="table-action-btn" title="Ko'rish">
                       👁️ Ko'rish
                     </a>
                   </td>
@@ -275,6 +276,36 @@ export interface TopProductItem {
               <div class="item-text">
                 <span class="item-head">To'lovlar Monitoringi</span>
                 <span class="item-sub">Tranzaksiyalar va cheklar nazorati</span>
+              </div>
+              <span class="item-arrow">&rarr;</span>
+            </a>
+
+            <!-- Kuryerlar -->
+            <a routerLink="/admin/curiers" class="action-item">
+              <span class="item-icon">🛵</span>
+              <div class="item-text">
+                <span class="item-head">Kuryerlar Boshqaruvi</span>
+                <span class="item-sub">Arizalar va faol kuryerlar</span>
+              </div>
+              <span class="item-arrow">&rarr;</span>
+            </a>
+
+            <!-- Filial sharhlari -->
+            <a routerLink="/admin/comments" class="action-item">
+              <span class="item-icon">💬</span>
+              <div class="item-text">
+                <span class="item-head">Filial Sharhlari</span>
+                <span class="item-sub">Mijoz baholari va fikrlari</span>
+              </div>
+              <span class="item-arrow">&rarr;</span>
+            </a>
+
+            <!-- Naqd pul hisobi (SuperAdmin / BranchManager) -->
+            <a *ngIf="authState.isSuperAdmin() || authState.userRole() === 'BranchManager'" routerLink="/admin/cash" class="action-item">
+              <span class="item-icon">💵</span>
+              <div class="item-text">
+                <span class="item-head">Naqd Pul Hisobi</span>
+                <span class="item-sub">Kuryerlar qarzi va inkassatsiya</span>
               </div>
               <span class="item-arrow">&rarr;</span>
             </a>
@@ -803,6 +834,7 @@ export class AdminDashboardComponent implements OnInit {
   revenuePeriod: '7d' | '30d' = '7d';
   barData7d: BarDataPoint[] = [];
   barData30d: BarDataPoint[] = [];
+  private productMap = new Map<number, Product>();
 
   authState = inject(AuthStateService);
   private customerService = inject(CustomerService);
@@ -893,15 +925,18 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   private loadSuperAdminStats(): void {
-    this.customerService.getAll().subscribe({
-      next: (d) => this.totalUsers = d?.length || 0,
+    this.customerService.getAllPaged({ pageNumber: 1, pageSize: 1 }).subscribe({
+      next: (res) => this.totalUsers = res?.totalCount || res?.items?.length || 0,
       error: () => {}
     });
 
     this.productService.getAll().subscribe({
       next: (prods) => {
-        this.totalProducts = prods?.length || 0;
-        this.extractLowStockProducts(prods || []);
+        const list = prods || [];
+        this.cacheProducts(list);
+        this.totalProducts = list.length;
+        this.extractLowStockProducts(list);
+        if (this.allOrders.length > 0) this.calculateTopProducts(this.allOrders);
       },
       error: () => {}
     });
@@ -929,8 +964,10 @@ export class AdminDashboardComponent implements OnInit {
         this.productService.getAll().subscribe({
           next: (products) => {
             const companyProducts = products?.filter(p => p.companyBranchId && branchIds.includes(p.companyBranchId)) || [];
+            this.cacheProducts(companyProducts);
             this.totalProducts = companyProducts.length;
             this.extractLowStockProducts(companyProducts);
+            if (this.allOrders.length > 0) this.calculateTopProducts(this.allOrders);
           },
           error: () => {}
         });
@@ -963,8 +1000,10 @@ export class AdminDashboardComponent implements OnInit {
     this.productService.getAll().subscribe({
       next: (products) => {
         const branchProducts = products?.filter(p => p.companyBranchId === branchId) || [];
+        this.cacheProducts(branchProducts);
         this.totalProducts = branchProducts.length;
         this.extractLowStockProducts(branchProducts);
+        if (this.allOrders.length > 0) this.calculateTopProducts(this.allOrders);
       },
       error: () => {}
     });
@@ -976,6 +1015,10 @@ export class AdminDashboardComponent implements OnInit {
       },
       error: () => {}
     });
+  }
+
+  private cacheProducts(products: Product[]): void {
+    products.forEach(p => this.productMap.set(p.id, p));
   }
 
   private extractLowStockProducts(products: Product[]): void {
@@ -1016,51 +1059,87 @@ export class AdminDashboardComponent implements OnInit {
 
   private calculateDonutSlices(orders: Order[]): void {
     const total = orders.length || 1;
-    const pending = orders.filter(o => Number(o.status) === OrderStatus.Pending).length;
-    const confirmed = orders.filter(o => Number(o.status) === OrderStatus.Confirmed).length;
-    const shipped = orders.filter(o => Number(o.status) === OrderStatus.Shipped).length;
-    const delivered = orders.filter(o => Number(o.status) === OrderStatus.Delivered).length;
-    const cancelled = orders.filter(o => Number(o.status) === OrderStatus.Cancelled).length;
+    const pending = orders.filter(o => parseOrderStatus(o.status) === OrderStatus.Pending).length;
+    const confirmed = orders.filter(o => parseOrderStatus(o.status) === OrderStatus.Confirmed).length;
+    const assigned = orders.filter(o => parseOrderStatus(o.status) === OrderStatus.AssignedToCourier).length;
+    const shipped = orders.filter(o => parseOrderStatus(o.status) === OrderStatus.Shipped).length;
+    const delivered = orders.filter(o => parseOrderStatus(o.status) === OrderStatus.Delivered).length;
+    const cancelled = orders.filter(o => parseOrderStatus(o.status) === OrderStatus.Cancelled).length;
+    const failed = orders.filter(o => parseOrderStatus(o.status) === OrderStatus.DeliveryFailed).length;
 
-    this.donutSlices = [
-      { label: 'Kutilmoqda', value: pending, percent: Math.round((pending / total) * 100), color: '#f59e0b' },
-      { label: 'Tasdiqlangan', value: confirmed, percent: Math.round((confirmed / total) * 100), color: '#3b82f6' },
-      { label: "Jo'natilgan", value: shipped, percent: Math.round((shipped / total) * 100), color: '#8b5cf6' },
-      { label: 'Yetkazilgan', value: delivered, percent: Math.round((delivered / total) * 100), color: '#10b981' },
-      { label: 'Bekor qilingan', value: cancelled, percent: Math.round((cancelled / total) * 100), color: '#ef4444' }
+    const slices: DonutSlice[] = [
+      { label: 'Kutilmoqda', value: pending, percent: orders.length ? Math.round((pending / total) * 100) : 0, color: '#f59e0b' },
+      { label: 'Tasdiqlangan', value: confirmed, percent: orders.length ? Math.round((confirmed / total) * 100) : 0, color: '#3b82f6' },
+      ...(assigned > 0 ? [{ label: 'Kuryerda', value: assigned, percent: Math.round((assigned / total) * 100), color: '#6366f1' }] : []),
+      { label: "Jo'natilgan", value: shipped, percent: orders.length ? Math.round((shipped / total) * 100) : 0, color: '#8b5cf6' },
+      { label: 'Yetkazilgan', value: delivered, percent: orders.length ? Math.round((delivered / total) * 100) : 0, color: '#10b981' },
+      { label: 'Bekor qilingan', value: cancelled, percent: orders.length ? Math.round((cancelled / total) * 100) : 0, color: '#ef4444' },
+      ...(failed > 0 ? [{ label: "Yetkazib bo'lmadi", value: failed, percent: Math.round((failed / total) * 100), color: '#dc2626' }] : [])
     ];
+    this.donutSlices = slices;
+  }
+
+  private formatCompactRevenue(val: number): string {
+    if (!val) return "0 so'm";
+    if (val >= 1_000_000) return (val / 1_000_000).toFixed(1) + ' mln';
+    if (val >= 1_000) return Math.round(val / 1_000) + ' ming';
+    return val.toLocaleString() + " so'm";
   }
 
   private calculateRevenueTrends(orders: Order[]): void {
-    // Generate realistic last 7 days daily labels & revenue
-    const days = ['Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan', 'Yak'];
+    const dayNames = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
     const today = new Date();
-    
-    this.barData7d = days.map((dayName, idx) => {
-      // Calculate day revenue from orders if matches or synthesize standard baseline
+    today.setHours(0, 0, 0, 0);
+
+    const dayBuckets: BarDataPoint[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const target = new Date(today);
+      target.setDate(today.getDate() - i);
+      const nextDay = new Date(target);
+      nextDay.setDate(target.getDate() + 1);
+
       const dayRev = orders
-        .filter((_, oIdx) => (oIdx % 7) === idx)
-        .reduce((sum, o) => sum + (o.totalPrice || 0), 0) || ((idx + 2) * 12_500_000);
+        .filter(o => {
+          if (!o.createdAt) return false;
+          const t = new Date(o.createdAt).getTime();
+          return t >= target.getTime() && t < nextDay.getTime();
+        })
+        .reduce((sum, o) => sum + (o.totalPrice || 0), 0);
 
-      return {
-        label: dayName,
+      dayBuckets.push({
+        label: dayNames[target.getDay()],
         value: dayRev,
-        formattedValue: (dayRev / 1_000_000).toFixed(1) + 'M'
-      };
-    });
+        formattedValue: this.formatCompactRevenue(dayRev)
+      });
+    }
+    this.barData7d = dayBuckets;
 
-    // Generate 30 days trends grouped in 4 weeks
-    this.barData30d = [
-      { label: '1-Hafta', value: Math.round(this.totalRevenue * 0.22) || 45_000_000, formattedValue: '45M' },
-      { label: '2-Hafta', value: Math.round(this.totalRevenue * 0.28) || 68_000_000, formattedValue: '68M' },
-      { label: '3-Hafta', value: Math.round(this.totalRevenue * 0.24) || 52_000_000, formattedValue: '52M' },
-      { label: '4-Hafta', value: Math.round(this.totalRevenue * 0.26) || 74_000_000, formattedValue: '74M' },
-    ];
+    const weekBuckets: BarDataPoint[] = [];
+    for (let w = 3; w >= 0; w--) {
+      const end = new Date(today);
+      end.setDate(today.getDate() - w * 7 + 1);
+      const start = new Date(today);
+      start.setDate(today.getDate() - (w + 1) * 7 + 1);
+
+      const weekRev = orders
+        .filter(o => {
+          if (!o.createdAt) return false;
+          const t = new Date(o.createdAt).getTime();
+          return t >= start.getTime() && t < end.getTime();
+        })
+        .reduce((sum, o) => sum + (o.totalPrice || 0), 0);
+
+      weekBuckets.push({
+        label: `${4 - w}-Hafta`,
+        value: weekRev,
+        formattedValue: this.formatCompactRevenue(weekRev)
+      });
+    }
+    this.barData30d = weekBuckets;
   }
 
   private calculateTopProducts(orders: Order[]): void {
-    // Count from order items if available, or populate top items
-    const prodMap = new Map<string, { count: number, revenue: number, id: number }>();
+    const prodMap = new Map<string, { count: number; revenue: number; id: number }>();
 
     orders.forEach(order => {
       if (order.orderItems && order.orderItems.length > 0) {
@@ -1076,24 +1155,20 @@ export class AdminDashboardComponent implements OnInit {
 
     if (prodMap.size > 0) {
       this.topProducts = Array.from(prodMap.entries())
-        .map(([name, data]) => ({
-          id: data.id,
-          name,
-          salesCount: data.count,
-          totalRevenue: data.revenue,
-          category: 'Texnika'
-        }))
+        .map(([name, data]) => {
+          const prod = this.productMap.get(data.id);
+          return {
+            id: data.id,
+            name,
+            salesCount: data.count,
+            totalRevenue: data.revenue,
+            category: prod?.categoryTitle || prod?.branchName || 'Barcha mahsulotlar'
+          };
+        })
         .sort((a, b) => b.salesCount - a.salesCount)
         .slice(0, 5);
     } else {
-      // Default top products
-      this.topProducts = [
-        { id: 1, name: 'iPhone 15 Pro Max 256GB', salesCount: 18, totalRevenue: 288_000_000, category: 'Smartfonlar' },
-        { id: 2, name: 'MacBook Air 15" M2', salesCount: 12, totalRevenue: 180_000_000, category: 'Noutbuklar' },
-        { id: 3, name: 'Sony PlayStation 5 Slim', salesCount: 9, totalRevenue: 63_000_000, category: 'O\'yin pristavkalari' },
-        { id: 4, name: 'Samsung Galaxy S24 Ultra', salesCount: 8, totalRevenue: 104_000_000, category: 'Smartfonlar' },
-        { id: 5, name: 'Dyson Airwrap Multi-Styler', salesCount: 6, totalRevenue: 42_000_000, category: 'Maishiy texnika' }
-      ];
+      this.topProducts = [];
     }
   }
 }

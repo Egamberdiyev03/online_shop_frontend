@@ -30,6 +30,16 @@ export class NotificationService {
     }, 4500);
   }
 
+  replace(type: 'success' | 'error' | 'info' | 'warning', message: string, title: string): void {
+    const id = Math.random().toString(36).substring(2, 9);
+    const toast: ToastNotification = { id, type, message, title };
+    this.toastsSignal.update(list => [...list.filter(t => t.title !== title), toast]);
+
+    setTimeout(() => {
+      this.remove(id);
+    }, 4500);
+  }
+
   success(message: string, title = 'Muvaffaqiyatli'): void {
     this.show('success', message, title);
   }

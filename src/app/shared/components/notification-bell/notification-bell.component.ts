@@ -21,7 +21,7 @@ import {
         [class.has-unread]="unreadCount() > 0"
         (click)="toggleDropdown($event)"
         [attr.aria-expanded]="isOpen()"
-        aria-label="Bildirishnomalar"
+        [attr.aria-label]="unreadCount() > 0 ? 'Bildirishnomalar (' + unreadCount() + ' ta o‘qilmagan)' : 'Bildirishnomalar'"
         title="Bildirishnomalar"
       >
         <span class="bell-icon">🔔</span>

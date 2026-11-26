@@ -16,10 +16,19 @@ export type NotificationType =
   | 'PaymentRefunded'
   | 'OrderPreparing'
   | 'OrderCancelledByCustomer'
+  | 'OrderAssignedToCurier'
+  | 'OrderUnassignedFromCurier'
+  | 'OrderCancelledForCurier'
+  | 'CurierAssigned'
+  | 'CurierApplication'
+  | 'CurierApproved'
+  | 'CurierRejected'
+  | 'CurierRejectedAssignment'
+  | 'PaymentReceiptPending'
   | number;
 
 export type NotificationPriority = 'Low' | 'Normal' | 'High' | number;
-export type NotificationEntityType = 'Order' | 'Product' | 'Branch' | number;
+export type NotificationEntityType = 'Order' | 'Product' | 'Branch' | 'Curier' | number;
 
 export interface NotificationDto {
   id: number;
@@ -81,11 +90,34 @@ export function getNotificationIcon(type: NotificationType): string {
     case 'CourierArrived':
     case 'HandoverToCourierReady':
     case 'HandedToCourier':
+    case 'OrderAssignedToCurier':
+    case 'CurierAssigned':
     case '8':
     case '9':
     case '10':
     case '11':
+    case '18':
+    case '21':
       return '🛵';
+    case 'OrderUnassignedFromCurier':
+    case 'OrderCancelledForCurier':
+    case 'CurierRejectedAssignment':
+    case '19':
+    case '20':
+    case '25':
+      return '🚫';
+    case 'CurierApplication':
+    case '22':
+      return '📝';
+    case 'CurierApproved':
+    case '23':
+      return '🎉';
+    case 'CurierRejected':
+    case '24':
+      return '❌';
+    case 'PaymentReceiptPending':
+    case '26':
+      return '🧾';
     case 'PaymentSucceeded':
     case '13':
       return '💳';
@@ -101,17 +133,20 @@ export function getNotificationIcon(type: NotificationType): string {
 }
 
 /**
- * Backenddan kelgan sanani to'g'ri parse qiluvchi yordamchi funksiya.
- * Backend bazaga Toshkent vaqtini (UTC+5) yozib, JSON serializatsiyada unga 'Z' (UTC) qo'shib yuborgan bo'lsa,
- * brauzer unga yana 5 soat qo'shib, kelajakka o'tkazib yubormasligi uchun 'Z' va offsetni tozalaydi.
+ * Backenddan kelgan UTC sanani brauzerning mahalliy vaqtiga to'g'ri parse qiluvchi yordamchi funksiya.
+ * Backend endi DateTime.UtcNow saqlagani uchun 'Z' yoki offsetni olib tashlamaymiz — brauzer
+ * avtomatik ravishda mahalliy vaqtga (O'zbekistonda UTC+5) o'giradi.
+ * Agar ISO stringda timezone ko'rsatilmagan bo'lsa, UTC deb qabul qilib 'Z' qo'shiladi.
  */
 export function parseNotificationDate(dateStr: string | Date): Date {
   if (!dateStr) return new Date();
   if (dateStr instanceof Date) return dateStr;
 
   if (typeof dateStr === 'string') {
-    const cleanStr = dateStr.replace(/Z|[+-]\d{2}(:\d{2})?$/, '');
-    const d = new Date(cleanStr);
+    const trimmed = dateStr.trim();
+    const hasTimezone = /(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(trimmed);
+    const normalized = hasTimezone || !trimmed.includes('T') ? trimmed : `${trimmed}Z`;
+    const d = new Date(normalized);
     if (!isNaN(d.getTime())) {
       return d;
     }

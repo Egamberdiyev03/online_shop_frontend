@@ -202,32 +202,39 @@ export class OrderStepperComponent {
   steps = [
     { status: OrderStatus.Pending, label: 'Kutilmoqda', hint: 'Buyurtma olindi' },
     { status: OrderStatus.Confirmed, label: 'Tasdiqlangan', hint: 'Omborga uzatildi' },
-    { status: OrderStatus.Shipped, label: "Jo'natilgan", hint: 'Kuryer yo‘lda' },
-    { status: OrderStatus.Delivered, label: 'Yetkazilgan', hint: 'Mijoz qabul qildi' }
+    { status: OrderStatus.AssignedToCourier, label: 'Kuryerda', hint: 'Kuryerga biriktirildi' },
+    { status: OrderStatus.Shipped, label: "Jo'natildi", hint: 'Kuryer yo‘lda' },
+    { status: OrderStatus.Delivered, label: 'Yetkazildi', hint: 'Mijoz qabul qildi' }
   ];
 
   get isCancelled(): boolean {
-    return parseOrderStatus(this.currentStatus) === OrderStatus.Cancelled;
+    const status = parseOrderStatus(this.currentStatus);
+    return status === OrderStatus.Cancelled || status === OrderStatus.DeliveryFailed;
   }
 
   private weight(status: OrderStatus | number): number {
     switch (parseOrderStatus(status)) {
       case OrderStatus.Pending: return 1;
       case OrderStatus.Confirmed: return 2;
-      case OrderStatus.Shipped: return 3;
-      case OrderStatus.Delivered: return 4;
+      case OrderStatus.AssignedToCourier: return 3;
+      case OrderStatus.Shipped: return 4;
+      case OrderStatus.Delivered: return 5;
       default: return 0;
     }
   }
 
   isCompleted(stepStatus: OrderStatus): boolean {
     if (this.isCancelled) return false;
-    return this.weight(this.currentStatus) > this.weight(stepStatus);
+    const current = parseOrderStatus(this.currentStatus);
+    if (current === OrderStatus.Delivered) return true;
+    return this.weight(current) > this.weight(stepStatus);
   }
 
   isActive(stepStatus: OrderStatus): boolean {
     if (this.isCancelled) return false;
-    return parseOrderStatus(this.currentStatus) === stepStatus;
+    const current = parseOrderStatus(this.currentStatus);
+    if (current === OrderStatus.Delivered) return false;
+    return current === stepStatus;
   }
 
   isUpcoming(stepStatus: OrderStatus): boolean {

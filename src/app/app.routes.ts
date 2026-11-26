@@ -1,6 +1,6 @@
 import { AdminDashboardComponent } from './features/admin/admin-dashboard/admin-dashboard.component';
 import { Routes } from '@angular/router';
-import { customerGuard, superAdminGuard, adminGuard, authGuard, branchDetailGuard, analyticsGuard } from './core/guards/auth.guard';
+import { customerGuard, superAdminGuard, adminGuard, authGuard, branchDetailGuard, analyticsGuard, curierGuard, cashAdminGuard, nonCurierGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -10,11 +10,13 @@ export const routes: Routes = [
   },
   {
     path: 'products',
-    loadComponent: () => import('./features/products/product-list/product-list.component').then(m => m.ProductListComponent)
+    loadComponent: () => import('./features/products/product-list/product-list.component').then(m => m.ProductListComponent),
+    canActivate: [nonCurierGuard]
   },
   {
     path: 'products/:id',
-    loadComponent: () => import('./features/products/product-detail/product-detail.component').then(m => m.ProductDetailComponent)
+    loadComponent: () => import('./features/products/product-detail/product-detail.component').then(m => m.ProductDetailComponent),
+    canActivate: [nonCurierGuard]
   },
   {
     path: 'cart',
@@ -23,7 +25,8 @@ export const routes: Routes = [
   },
   {
     path: 'orders',
-    loadComponent: () => import('./features/orders/orders-list/orders-list.component').then(m => m.OrdersListComponent)
+    loadComponent: () => import('./features/orders/orders-list/orders-list.component').then(m => m.OrdersListComponent),
+    canActivate: [nonCurierGuard]
   },
   {
     path: 'categories',
@@ -72,7 +75,7 @@ export const routes: Routes = [
   {
     path: 'profile/comments',
     loadComponent: () => import('./features/profile/my-comments/my-comments.component').then(m => m.MyCommentsComponent),
-    canActivate: [authGuard]
+    canActivate: [customerGuard]
   },
   {
     path: 'profile/settings',
@@ -87,12 +90,12 @@ export const routes: Routes = [
   {
     path: 'payments',
     loadComponent: () => import('./features/payments/customer-payments-list/customer-payments-list.component').then(m => m.CustomerPaymentsListComponent),
-    canActivate: [authGuard]
+    canActivate: [customerGuard]
   },
   {
     path: 'payments/:id',
     loadComponent: () => import('./features/payments/payment-detail/payment-detail.component').then(m => m.PaymentDetailComponent),
-    canActivate: [authGuard]
+    canActivate: [customerGuard]
   },
   {
     path: 'admin/payments',
@@ -107,7 +110,8 @@ export const routes: Routes = [
   {
     path: 'order-items',
     loadComponent: () => import('./features/placeholders/placeholder.component').then(m => m.PlaceholderComponent),
-    data: { type: 'order-items' }
+    data: { type: 'order-items' },
+    canActivate: [nonCurierGuard]
   },
   {
     path: 'admin',
@@ -118,6 +122,53 @@ export const routes: Routes = [
     path: 'analytics',
     component: AdminDashboardComponent,
     canActivate: [analyticsGuard]
+  },
+  // Kuryer sahifalari
+  {
+    path: 'curier',
+    canActivate: [curierGuard],
+    children: [
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      { path: 'profile', redirectTo: 'dashboard', pathMatch: 'full' },
+      {
+        path: 'dashboard',
+        loadComponent: () => import('./features/curier/curier-dashboard/curier-dashboard.component').then(m => m.CurierDashboardComponent)
+      },
+      {
+        path: 'deliveries',
+        loadComponent: () => import('./features/curier/curier-deliveries/curier-deliveries.component').then(m => m.CurierDeliveriesComponent)
+      },
+      {
+        path: 'orders/:id',
+        loadComponent: () => import('./features/curier/curier-deliveries/curier-deliveries.component').then(m => m.CurierDeliveriesComponent)
+      }
+    ]
+  },
+  {
+    path: 'become-curier',
+    loadComponent: () => import('./features/curier/curier-apply/curier-apply.component').then(m => m.CurierApplyComponent),
+    canActivate: [customerGuard]
+  },
+  // Admin kuryer sahifalari
+  {
+    path: 'admin/curiers',
+    loadComponent: () => import('./features/admin/admin-curiers/admin-curiers.component').then(m => m.AdminCuriersComponent),
+    canActivate: [adminGuard]
+  },
+  {
+    path: 'admin/curiers/:id',
+    loadComponent: () => import('./features/admin/admin-curiers/admin-curiers.component').then(m => m.AdminCuriersComponent),
+    canActivate: [adminGuard]
+  },
+  {
+    path: 'admin/comments',
+    loadComponent: () => import('./features/admin/branch-comments/branch-comments.component').then(m => m.BranchCommentsComponent),
+    canActivate: [adminGuard]
+  },
+  {
+    path: 'admin/cash',
+    loadComponent: () => import('./features/admin/admin-cash/admin-cash.component').then(m => m.AdminCashComponent),
+    canActivate: [cashAdminGuard]
   },
   {
     path: '**',

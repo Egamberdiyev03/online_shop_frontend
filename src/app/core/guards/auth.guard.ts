@@ -30,6 +30,8 @@ export const guestGuard: CanActivateFn = () => {
   const router = inject(Router);
 
   if (authState.isAuthenticated()) {
+    if (authState.isCurier()) return router.createUrlTree(['/curier']);
+    if (authState.isAdminRole()) return router.createUrlTree(['/admin']);
     return router.createUrlTree(['/products']);
   }
 
@@ -37,30 +39,46 @@ export const guestGuard: CanActivateFn = () => {
 };
 
 /**
- * Faqat Admin yoki Menejerlar uchun ruxsat beruvchi guard
+ * Kuryer bo'lmagan foydalanuvchilar uchun (Kuryer kirsa /curier ga yo'naltiriladi)
  */
-export const adminGuard: CanActivateFn = () => {
+export const nonCurierGuard: CanActivateFn = () => {
+  const authState = inject(AuthStateService);
+  const router = inject(Router);
+
+  if (authState.isCurier()) {
+    return router.createUrlTree(['/curier']);
+  }
+
+  return true;
+};
+
+/**
+ * Faqat Admin yoki Filial xodimlari uchun ruxsat beruvchi guard
+ * (SuperAdmin, CompanyAdmin, BranchManager, BranchAdmin)
+ */
+export const adminGuard: CanActivateFn = (route, state) => {
   const authState = inject(AuthStateService);
   const router = inject(Router);
   const notification = inject(NotificationService);
 
-  const role = authState.userRole();
-  // SuperAdmin, CompanyAdmin va BranchManager admin paneliga kirishi mumkin
-  const isAdmin = role === 'SuperAdmin' || role === 'CompanyAdmin' || role === 'BranchManager';
+  if (!authState.isAuthenticated()) {
+    notification.warning("Bu sahifani ko'rish uchun avval tizimga kiring.");
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
+  }
 
-  if (isAdmin) {
+  if (authState.isAdminRole()) {
     return true;
   }
 
-  notification.error("Ushbu bo'limga faqat administratorlar kirishi mumkin.");
-  return router.createUrlTree(['/products']);
+  notification.error("Ushbu bo'limga faqat administratorlar va filial xodimlari kirishi mumkin.");
+  return router.createUrlTree([authState.isCurier() ? '/curier' : '/products']);
 };
 
 /**
  * Analitika sahifasi guardi:
  * Mehmon (tizimga kirmagan) bo'lsa -> /login ga yo'naltiriladi
  * Customer bo'lsa -> ogohlantirish bilan /products ga yo'naltiriladi
- * SuperAdmin, CompanyAdmin, BranchManager -> ruxsat beriladi
+ * SuperAdmin, CompanyAdmin, BranchManager, BranchAdmin -> ruxsat beriladi
  */
 export const analyticsGuard: CanActivateFn = (route, state) => {
   const authState = inject(AuthStateService);
@@ -77,7 +95,7 @@ export const analyticsGuard: CanActivateFn = (route, state) => {
   }
 
   notification.error("Sizda analitikani ko'rish huquqi yo'q.");
-  return router.createUrlTree(['/products']);
+  return router.createUrlTree([authState.isCurier() ? '/curier' : '/products']);
 };
 
 /**
@@ -93,14 +111,15 @@ export const superAdminGuard: CanActivateFn = () => {
   }
 
   notification.error("Ushbu bo'limga faqat SuperAdmin kirishi mumkin.");
-  return router.createUrlTree(['/products']);
+  return router.createUrlTree([authState.isCurier() ? '/curier' : '/products']);
 };
 
 /**
- * Faqat Customer (oddiy mijoz) uchun ruxsat beruvchi guard (Savat, Buyurtma berish)
- * CompanyAdmin, BranchAdmin, SuperAdmin bu sahifaga kira olmaydi
+ * Faqat Customer (oddiy mijoz) uchun ruxsat beruvchi guard
+ * (Savat, buyurtma berish, To'lovlarim, Sharhlarim, Kuryer bo'lish)
+ * Curier -> /curier ga, Admin/Filial xodimlari -> /admin ga yo'naltiriladi
  */
-export const customerGuard: CanActivateFn = () => {
+export const customerGuard: CanActivateFn = (route, state) => {
   const authState = inject(AuthStateService);
   const router = inject(Router);
   const notification = inject(NotificationService);
@@ -108,13 +127,17 @@ export const customerGuard: CanActivateFn = () => {
   // Agar foydalanuvchi autentifikatsiya qilinmagan bo'lsa - login sahifasiga yo'naltirish
   if (!authState.isAuthenticated()) {
     notification.warning("Bu sahifani ko'rish uchun avval tizimga kiring.");
-    return router.createUrlTree(['/login']);
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
   }
 
-  // Agar foydalanuvchi admin roli bo'lsa - ruxsat bermaslik
+  if (authState.isCurier()) {
+    return router.createUrlTree(['/curier']);
+  }
+
+  // Agar foydalanuvchi admin yoki filial xodimi roli bo'lsa - ruxsat bermaslik
   if (authState.isAdminRole()) {
-    notification.warning("Savat faqat mijozlar uchun mavjud. Admin sifatida savatdan foydalana olmaysiz.");
-    return router.createUrlTree(['/products']);
+    notification.warning("Bu bo'lim faqat mijozlar uchun mavjud.");
+    return router.createUrlTree(['/admin']);
   }
 
   return true;
@@ -143,6 +166,11 @@ export const branchDetailGuard: CanActivateFn = (route, state) => {
   // SuperAdmin barcha filiallarga kira oladi
   if (authState.isSuperAdmin()) {
     return true;
+  }
+
+  // Curier kira olmaydi -> Kuryer kabinetiga yo'naltirish
+  if (authState.isCurier()) {
+    return router.createUrlTree(['/curier']);
   }
 
   // Customer umuman kira olmaydi
@@ -194,4 +222,71 @@ export const branchDetailGuard: CanActivateFn = (route, state) => {
 
   notification.error("Sizda bu filial ma'lumotlarini ko'rish huquqi yo'q.");
   return router.createUrlTree(['/map']);
+};
+
+/**
+ * Faqat Curier (kuryer) roli uchun ruxsat beruvchi guard
+ */
+export const curierGuard: CanActivateFn = (route, state) => {
+  const authState = inject(AuthStateService);
+  const router = inject(Router);
+  const notification = inject(NotificationService);
+
+  if (!authState.isAuthenticated()) {
+    notification.warning("Bu sahifani ko'rish uchun avval tizimga kiring.");
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
+  }
+
+  const role = authState.userRole();
+  if (role === 'Curier') {
+    return true;
+  }
+
+  notification.error("Bu sahifa faqat kuryerlar uchun.");
+  return router.createUrlTree(['/products']);
+};
+
+/**
+ * Kuryer yoki Admin rollari uchun ruxsat beruvchi guard
+ */
+export const curierOrAdminGuard: CanActivateFn = (route, state) => {
+  const authState = inject(AuthStateService);
+  const router = inject(Router);
+  const notification = inject(NotificationService);
+
+  if (!authState.isAuthenticated()) {
+    notification.warning("Bu sahifani ko'rish uchun avval tizimga kiring.");
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
+  }
+
+  const role = authState.userRole();
+  const allowedRoles = ['SuperAdmin', 'CompanyAdmin', 'BranchManager', 'BranchAdmin', 'Curier'];
+
+  if (allowedRoles.includes(role || '')) {
+    return true;
+  }
+
+  notification.error("Sizda bu sahifaga kirish huquqi yo'q.");
+  return router.createUrlTree(['/products']);
+};
+
+/**
+ * Faqat SuperAdmin va BranchManager uchun naqd pul hisobi guardi
+ */
+export const cashAdminGuard: CanActivateFn = (route, state) => {
+  const authState = inject(AuthStateService);
+  const router = inject(Router);
+  const notification = inject(NotificationService);
+
+  if (!authState.isAuthenticated()) {
+    notification.warning("Bu sahifani ko'rish uchun avval tizimga kiring.");
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
+  }
+
+  if (authState.isSuperAdmin() || authState.userRole() === 'BranchManager') {
+    return true;
+  }
+
+  notification.error("Naqd pul hisobini faqat SuperAdmin va Filial mudiri ko'rishi mumkin.");
+  return router.createUrlTree(['/admin']);
 };

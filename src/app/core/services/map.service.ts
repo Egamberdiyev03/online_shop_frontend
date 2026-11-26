@@ -23,6 +23,14 @@ export interface MapLocation {
   address?: string;
 }
 
+export interface RouteEstimate {
+  distanceKm: number;
+  minMinutes: number;
+  maxMinutes: number;
+  isRoadRoute: boolean;
+  geometry: [number, number][];
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -171,7 +179,7 @@ export class MapService {
     `;
   }
 
-  private escapeHtml(str: string): string {
+  escapeHtml(str: string): string {
     return str
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -317,5 +325,146 @@ export class MapService {
       locations.map(loc => [loc.latitude, loc.longitude] as [number, number])
     );
     map.fitBounds(bounds, { padding: [50, 50] });
+  }
+
+  isValidCoord(lat?: number | null, lng?: number | null): boolean {
+    if (lat == null || lng == null) return false;
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    return !isNaN(nLat) && !isNaN(nLng) && !(nLat === 0 && nLng === 0);
+  }
+
+  extractBranchLocation(branch?: { latitude?: number; longitude?: number; location?: string; address?: string } | null): MapLocation | null {
+    if (!branch) return null;
+    let lat = branch.latitude != null ? Number(branch.latitude) : NaN;
+    let lng = branch.longitude != null ? Number(branch.longitude) : NaN;
+    if ((isNaN(lat) || isNaN(lng)) && branch.location) {
+      const match = branch.location.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+      if (match) {
+        lat = parseFloat(match[1]);
+        lng = parseFloat(match[2]);
+      }
+    }
+    return this.isValidCoord(lat, lng) ? { latitude: lat, longitude: lng, address: branch.address } : null;
+  }
+
+  createEmojiPin(emoji: string, bg: string): L.DivIcon {
+    return L.divIcon({
+      html: `<div style="width:36px;height:36px;border-radius:50%;background:${bg};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;border:2.5px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.3);">${emoji}</div>`,
+      className: 'track-custom-pin',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -20]
+    });
+  }
+
+  getDirectionsUrl(origin?: MapLocation | null, dest?: MapLocation | null): string | null {
+    if (origin && dest && (origin.latitude !== dest.latitude || origin.longitude !== dest.longitude)) {
+      return `https://www.google.com/maps/dir/?api=1&origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}`;
+    }
+    const single = dest || origin;
+    return single ? `https://www.google.com/maps?q=${single.latitude},${single.longitude}` : null;
+  }
+
+  getVehicleSpeedKmh(vehicleType?: number | string): number {
+    const key = typeof vehicleType === 'string' ? vehicleType.trim().toLowerCase() : vehicleType;
+    if (key === 0 || key === 'foot') return 4.8;
+    if (key === 3 || key === 'bicycle') return 15;
+    if (key === 2 || key === 'motorcycle') return 32;
+    if (key === 1 || key === 'car') return 28;
+    return 25;
+  }
+
+  private buildEtaRange(rawMinutes: number, includePickupBuffer: boolean): { minMinutes: number; maxMinutes: number } {
+    const buffer = includePickupBuffer ? 5 : 0;
+    const total = rawMinutes + buffer;
+    const minMinutes = Math.max(2, Math.round(total * 0.9));
+    const maxMinutes = Math.max(minMinutes + 2, Math.round(total * 1.2 + 2));
+    return { minMinutes, maxMinutes };
+  }
+
+  private buildFallbackRoute(
+    points: MapLocation[],
+    vehicleType?: number | string,
+    includePickupBuffer = false
+  ): RouteEstimate {
+    let straightKm = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      straightKm += this.calculateDistance(points[i], points[i + 1]);
+    }
+    const distanceKm = Math.round(straightKm * 1.35 * 10) / 10;
+    const speedKmh = this.getVehicleSpeedKmh(vehicleType);
+    const travelMinutes = (distanceKm / speedKmh) * 60;
+    const { minMinutes, maxMinutes } = this.buildEtaRange(travelMinutes, includePickupBuffer);
+    return {
+      distanceKm,
+      minMinutes,
+      maxMinutes,
+      isRoadRoute: false,
+      geometry: points.map(p => [p.latitude, p.longitude] as [number, number])
+    };
+  }
+
+  /**
+   * OSRM ko'cha marshruti orqali masofa va ETA hisoblash (ishlamasa Haversine fallback)
+   */
+  async estimateRoute(
+    points: MapLocation[],
+    vehicleType?: number | string,
+    includePickupBuffer = false
+  ): Promise<RouteEstimate> {
+    if (points.length < 2) {
+      return { distanceKm: 0, minMinutes: 0, maxMinutes: 0, isRoadRoute: false, geometry: [] };
+    }
+
+    const fallback = this.buildFallbackRoute(points, vehicleType, includePickupBuffer);
+    if (fallback.distanceKm < 0.05) {
+      return fallback;
+    }
+
+    const coordsParam = points.map(p => `${p.longitude},${p.latitude}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+
+    try {
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!resp.ok) return fallback;
+
+      const data = await resp.json();
+      const route = data?.routes?.[0];
+      const coords = route?.geometry?.coordinates;
+      if (!route || !Array.isArray(coords) || coords.length === 0) {
+        return fallback;
+      }
+
+      const distanceKm = Math.round((Number(route.distance) / 1000) * 10) / 10;
+      const osrmMinutes = Number(route.duration) / 60;
+      const speedKmh = this.getVehicleSpeedKmh(vehicleType);
+      const speedMinutes = (distanceKm / speedKmh) * 60;
+
+      const key = typeof vehicleType === 'string' ? vehicleType.trim().toLowerCase() : vehicleType;
+      let travelMinutes = speedMinutes;
+      if (key === 1 || key === 'car') {
+        travelMinutes = Math.max(osrmMinutes * 1.15, speedMinutes);
+      } else if (key === 2 || key === 'motorcycle') {
+        travelMinutes = Math.max(osrmMinutes * 0.95, speedMinutes);
+      }
+
+      const { minMinutes, maxMinutes } = this.buildEtaRange(travelMinutes, includePickupBuffer);
+      const geometry: [number, number][] = coords.map((c: [number, number]) => [c[1], c[0]]);
+
+      return {
+        distanceKm,
+        minMinutes,
+        maxMinutes,
+        isRoadRoute: true,
+        geometry
+      };
+    } catch {
+      clearTimeout(timer);
+      return fallback;
+    }
   }
 }

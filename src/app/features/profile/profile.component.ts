@@ -1,17 +1,23 @@
 import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { CustomerService } from '../../core/services/customer.service';
+import { CurierService } from '../../core/services/curier.service';
+import { PaymentService } from '../../core/services/payment.service';
 import { AuthStateService } from '../../core/services/auth-state.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { TelegramService } from '../../core/services/telegram.service';
 import { Customer } from '../../core/models/customer.model';
+import { CurierResponseDto } from '../../core/models/curier.model';
+import { ImageUrlPipe } from '../../shared/pipes/image-url.pipe';
 import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, ImageUrlPipe],
   template: `
     <div class="profile-page">
       <!-- Header with gradient -->
@@ -34,13 +40,13 @@ import { environment } from '../../../environments/environment';
           <!-- Avatar -->
           <div class="avatar-wrapper">
             <img
-              *ngIf="avatarUrl"
-              [src]="avatarUrl"
+              *ngIf="avatarUrl && !avatarBroken"
+              [src]="avatarUrl | imageUrl"
               [alt]="displayName"
               class="avatar-img"
-              (error)="avatarUrl = ''"
+              (error)="avatarBroken = true"
             />
-            <span *ngIf="!avatarUrl" class="avatar-initials">{{ initials }}</span>
+            <span *ngIf="!avatarUrl || avatarBroken" class="avatar-initials">{{ initials }}</span>
           </div>
 
           <!-- Name & Phone -->
@@ -73,46 +79,182 @@ import { environment } from '../../../environments/environment';
       <!-- Menu Cards -->
       <div class="menu-container" *ngIf="!isLoading && !hasError">
         <!-- Card 1: Asosiy -->
-        <div class="menu-card">
-          <a
-            routerLink="/payments"
-            class="menu-item"
-            (click)="onMenuClick()"
-          >
-            <span class="menu-icon-box icon-payments" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-                <line x1="1" y1="10" x2="23" y2="10"/>
-              </svg>
-            </span>
-            <span class="menu-text">To'lovlarim</span>
-            <span class="menu-arrow" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            </span>
-          </a>
+        <div class="menu-card menu-card-primary">
+          <ng-container *ngIf="authState.isCurier()">
+            <a
+              routerLink="/curier"
+              class="menu-item curier-cabinet-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-curier" aria-hidden="true">🛵</span>
+              <span class="menu-text curier-cabinet-text">
+                <span class="curier-cabinet-title">Kuryer kabineti</span>
+                <span class="curier-cabinet-meta">
+                  <span
+                    class="curier-status-badge"
+                    [class.online]="curierProfile?.isActive && curierProfile?.isOnline"
+                    [class.offline]="!curierProfile || !curierProfile.isOnline || !curierProfile.isActive"
+                  >
+                    <span class="curier-status-dot"></span>
+                    {{ curierStatusLabel }}
+                  </span>
+                  <span
+                    class="curier-debt-badge has-debt"
+                    *ngIf="curierDebt !== null && curierDebt > 0"
+                  >
+                    Qarz: {{ formatMoney(curierDebt) }}
+                  </span>
+                </span>
+              </span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+          </ng-container>
 
-          <div class="menu-divider"></div>
+          <ng-container *ngIf="authState.isCustomer()">
+            <a
+              routerLink="/payments"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-payments" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                  <line x1="1" y1="10" x2="23" y2="10"/>
+                </svg>
+              </span>
+              <span class="menu-text">To'lovlarim</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
 
-          <button
-            class="menu-item"
-            (click)="openComments()"
-          >
-            <span class="menu-icon-box icon-comments" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </span>
-            <span class="menu-text">Sharhlarim</span>
-            <span class="menu-arrow" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            </span>
-          </button>
+            <button
+              class="menu-item"
+              (click)="openComments()"
+            >
+              <span class="menu-icon-box icon-comments" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </span>
+              <span class="menu-text">Sharhlarim</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </button>
+          </ng-container>
 
-          <div class="menu-divider"></div>
+          <ng-container *ngIf="authState.isAdminRole()">
+            <a
+              *ngIf="authState.userRole() === 'BranchAdmin'"
+              routerLink="/products"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-products" aria-hidden="true">📦</span>
+              <span class="menu-text">Mahsulotlar</span>
+              <span class="menu-value">Katalog</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+
+            <a
+              *ngIf="authState.isBranchManager() && authState.userBranchId()"
+              [routerLink]="['/branches', authState.userBranchId()]"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-branch" aria-hidden="true">🏬</span>
+              <span class="menu-text">Mening Filialim</span>
+              <span class="menu-value">Boshqaruv</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+
+            <a
+              routerLink="/admin/comments"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-comments" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </span>
+              <span class="menu-text">Filial sharhlari</span>
+              <span class="menu-value">{{ (authState.isSuperAdmin() || authState.isCompanyAdmin()) ? 'Filtr bilan' : "O'z filiali" }}</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+
+            <a
+              routerLink="/admin/payments"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-payments" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                  <line x1="1" y1="10" x2="23" y2="10"/>
+                </svg>
+              </span>
+              <span class="menu-text">To'lovlar</span>
+              <span class="menu-value">Tekshirish</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+
+            <a
+              routerLink="/admin/curiers"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-curier" aria-hidden="true">🛵</span>
+              <span class="menu-text">Kuryerlar</span>
+              <span class="menu-value">{{ authState.isSuperAdmin() ? 'Boshqaruv' : "Ro'yxat" }}</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+
+            <a
+              *ngIf="authState.isSuperAdmin() || authState.userRole() === 'BranchManager'"
+              routerLink="/admin/cash"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box icon-cash" aria-hidden="true">💵</span>
+              <span class="menu-text">Naqd pul hisobi</span>
+              <span class="menu-value">Inkassatsiya</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+          </ng-container>
 
           <a
             routerLink="/map"
@@ -134,8 +276,6 @@ import { environment } from '../../../environments/environment';
             </span>
           </a>
 
-          <div class="menu-divider"></div>
-
           <button
             class="menu-item"
             (click)="openNotifications()"
@@ -153,6 +293,23 @@ import { environment } from '../../../environments/environment';
               </svg>
             </span>
           </button>
+
+          <ng-container *ngIf="authState.isCustomer()">
+            <a
+              routerLink="/become-curier"
+              class="menu-item"
+              (click)="onMenuClick()"
+            >
+              <span class="menu-icon-box" style="background: #ede9fe; color: #7c3aed;" aria-hidden="true">🛵</span>
+              <span class="menu-text">Kuryer bo'lish</span>
+              <span class="menu-value">Ariza topshirish</span>
+              <span class="menu-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </span>
+            </a>
+          </ng-container>
         </div>
 
         <!-- Card 2: Sozlamalar -->
@@ -218,6 +375,30 @@ import { environment } from '../../../environments/environment';
           </svg>
           <span>Chiqish</span>
         </button>
+      </div>
+
+      <!-- Help & Support Modal -->
+      <div class="support-modal-overlay" *ngIf="showHelpModal" (click)="closeHelp()">
+        <div class="support-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="profileHelpTitle">
+          <div class="support-modal-header">
+            <h3 id="profileHelpTitle">💬 Yordam va qo'llab-quvvatlash</h3>
+            <button type="button" class="support-close-btn" (click)="closeHelp()" aria-label="Yopish">&times;</button>
+          </div>
+          <div class="support-modal-body">
+            <p class="support-desc">Buyurtmalar, to'lovlar yoki texnik savollar bo'yicha operatorimiz bilan bog'lanishingiz mumkin:</p>
+            <div class="support-contact-box">
+              <span class="support-handle">&#64;{{ supportUsername }}</span>
+              <button type="button" class="support-copy-btn" (click)="copySupportHandle()">
+                {{ supportCopied ? '✓ Nusxalandi' : '📋 Nusxalash' }}
+              </button>
+            </div>
+            <p class="support-hours">🕒 Ish vaqti: Har kuni, 09:00 – 21:00</p>
+          </div>
+          <div class="support-modal-footer">
+            <button type="button" class="support-btn-sec" (click)="closeHelp()">Yopish</button>
+            <button type="button" class="support-btn-pri" (click)="openTelegramSupport()">✈️ Telegramda yozish ↗</button>
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -364,6 +545,11 @@ import { environment } from '../../../environments/environment';
       color: #ffffff;
     }
 
+    .role-curier {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: #ffffff;
+    }
+
     .user-phone {
       font-size: 14px;
       color: rgba(255, 255, 255, 0.8);
@@ -458,6 +644,107 @@ import { environment } from '../../../environments/environment';
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
+    }
+
+    .curier-cabinet-item {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.11) 0%, rgba(16, 185, 129, 0.04) 100%);
+      border-left: 4px solid #16a34a;
+      padding-left: 12px;
+    }
+
+    .curier-cabinet-item:hover {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.16) 0%, rgba(16, 185, 129, 0.08) 100%);
+    }
+
+    .icon-curier {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: #ffffff;
+      font-size: 18px;
+    }
+
+    .icon-cash {
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      color: #ffffff;
+      font-size: 18px;
+    }
+
+    .icon-products {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: #ffffff;
+      font-size: 18px;
+    }
+
+    .icon-branch {
+      background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+      color: #ffffff;
+      font-size: 18px;
+    }
+
+    .menu-card-primary > .menu-item + .menu-item {
+      border-top: 1px solid var(--border, #e2e8f0);
+    }
+
+    .curier-cabinet-text {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .curier-cabinet-title {
+      font-weight: 600;
+    }
+
+    .curier-cabinet-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .curier-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    .curier-status-badge.online {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .curier-status-badge.offline {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    .curier-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .curier-debt-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .curier-debt-badge.has-debt {
+      background: #fef3c7;
+      color: #b45309;
     }
 
     .icon-payments {
@@ -622,19 +909,191 @@ import { environment } from '../../../environments/environment';
     :host-context(.dark-theme) .logout-btn:hover {
       background: rgba(255, 107, 122, 0.1);
     }
+
+    :host-context(body.dark-theme) .curier-status-badge.offline,
+    :host-context(.dark-theme) .curier-status-badge.offline {
+      background: #1e293b;
+      color: #94a3b8;
+    }
+
+    :host-context(body.dark-theme) .curier-status-badge.online,
+    :host-context(.dark-theme) .curier-status-badge.online {
+      background: rgba(34, 197, 94, 0.18);
+      color: #4ade80;
+    }
+
+    :host-context(body.dark-theme) .curier-debt-badge,
+    :host-context(.dark-theme) .curier-debt-badge {
+      background: #1e293b;
+      color: #cbd5e1;
+    }
+
+    :host-context(body.dark-theme) .curier-debt-badge.has-debt,
+    :host-context(.dark-theme) .curier-debt-badge.has-debt {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+    }
+
+    :host-context(body.dark-theme) .curier-cabinet-item,
+    :host-context(.dark-theme) .curier-cabinet-item {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.06) 100%);
+      border-left-color: #22c55e;
+    }
+
+    :host-context(body.dark-theme) .curier-cabinet-item:hover,
+    :host-context(.dark-theme) .curier-cabinet-item:hover {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.22) 0%, rgba(16, 185, 129, 0.1) 100%);
+    }
+
+    :host-context(body.dark-theme) .menu-card-primary > .menu-item + .menu-item,
+    :host-context(.dark-theme) .menu-card-primary > .menu-item + .menu-item {
+      border-top-color: var(--border, #232B45);
+    }
+
+    .support-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1200;
+      padding: 1rem;
+    }
+    .support-modal {
+      width: 100%;
+      max-width: 420px;
+      background: var(--bg-card, #ffffff);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
+      overflow: hidden;
+    }
+    .support-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .support-modal-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-main, #0f172a);
+    }
+    .support-close-btn {
+      background: transparent;
+      border: none;
+      font-size: 1.4rem;
+      line-height: 1;
+      color: var(--text-muted, #475569);
+      cursor: pointer;
+    }
+    .support-modal-body {
+      padding: 1.15rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .support-desc,
+    .support-hours {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--text-muted, #475569);
+      line-height: 1.5;
+    }
+    .support-contact-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.7rem 0.9rem;
+      background: var(--bg-subtle, #f1f5f9);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 10px;
+    }
+    .support-handle {
+      font-weight: 700;
+      color: var(--primary, #4f46e5);
+    }
+    .support-copy-btn,
+    .support-btn-sec,
+    .support-btn-pri {
+      padding: 0.5rem 0.9rem;
+      border-radius: 9px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .support-copy-btn,
+    .support-btn-sec {
+      background: var(--bg-card, #ffffff);
+      border-color: var(--border, #cbd5e1);
+      color: var(--text-main, #0f172a);
+    }
+    .support-btn-pri {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+    .support-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.65rem;
+      padding: 0.9rem 1.25rem;
+      border-top: 1px solid var(--border, #e2e8f0);
+    }
+    :host-context(body.dark-theme) .support-modal,
+    :host-context(.dark-theme) .support-modal {
+      background: #151e32;
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .support-modal-header h3,
+    :host-context(.dark-theme) .support-modal-header h3 {
+      color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .support-desc,
+    :host-context(.dark-theme) .support-desc,
+    :host-context(body.dark-theme) .support-hours,
+    :host-context(.dark-theme) .support-hours {
+      color: #cbd5e1;
+    }
+    :host-context(body.dark-theme) .support-contact-box,
+    :host-context(.dark-theme) .support-contact-box {
+      background: #0f172a;
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .support-copy-btn,
+    :host-context(.dark-theme) .support-copy-btn,
+    :host-context(body.dark-theme) .support-btn-sec,
+    :host-context(.dark-theme) .support-btn-sec {
+      background: #1e293b;
+      border-color: #334155;
+      color: #e2e8f0;
+    }
   `]
 })
 export class ProfileComponent implements OnInit, OnDestroy {
   private customerService = inject(CustomerService);
+  private curierService = inject(CurierService);
+  private paymentService = inject(PaymentService);
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
   private tg = inject(TelegramService);
   private router = inject(Router);
 
   currentCustomer: Customer | null = null;
+  curierProfile: CurierResponseDto | null = null;
+  curierDebt: number | null = null;
   isLoading = true;
   hasError = false;
-  avatarUrl = '';
+  tgPhotoUrl = '';
+  avatarBroken = false;
+  showHelpModal = false;
+  supportCopied = false;
+  supportUsername = environment.telegramSupportUsername;
 
   // Theme support - Telegram Mini App'da mavjud
   hasThemeSupport = true;
@@ -657,7 +1116,7 @@ export class ProfileComponent implements OnInit, OnDestroy {
   private loadTelegramUserPhoto(): void {
     const tgUser = this.tg.telegramUser;
     if (tgUser?.photoUrl) {
-      this.avatarUrl = tgUser.photoUrl;
+      this.tgPhotoUrl = tgUser.photoUrl;
     }
   }
 
@@ -676,6 +1135,7 @@ export class ProfileComponent implements OnInit, OnDestroy {
   loadProfile(): void {
     this.isLoading = true;
     this.hasError = false;
+    this.avatarBroken = false;
     const userId = this.authState.currentCustomerId();
 
     if (!userId) {
@@ -684,6 +1144,29 @@ export class ProfileComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.authState.isCurier()) {
+      forkJoin({
+        customer: this.customerService.getById(userId).pipe(catchError(() => of(null))),
+        curier: this.curierService.getMyProfile().pipe(catchError(() => of(null))),
+        cashSummary: this.paymentService.getMyCashSummary().pipe(catchError(() => of(null)))
+      }).subscribe({
+        next: ({ customer, curier, cashSummary }) => {
+          this.currentCustomer = customer;
+          this.curierProfile = curier;
+          this.curierDebt = cashSummary ? (cashSummary.debt ?? 0) : null;
+          this.isLoading = false;
+          this.hasError = !customer && !curier;
+        },
+        error: () => {
+          this.isLoading = false;
+          this.hasError = true;
+        }
+      });
+      return;
+    }
+
+    this.curierProfile = null;
+    this.curierDebt = null;
     this.customerService.getById(userId).subscribe({
       next: (customer) => {
         this.currentCustomer = customer;
@@ -696,6 +1179,24 @@ export class ProfileComponent implements OnInit, OnDestroy {
     });
   }
 
+  get avatarUrl(): string {
+    const curierPhoto = this.curierProfile?.profilePictureUrl?.trim();
+    if (this.authState.isCurier()) {
+      return curierPhoto || '';
+    }
+    return curierPhoto || this.tgPhotoUrl || '';
+  }
+
+  get curierStatusLabel(): string {
+    if (!this.curierProfile) return 'Offline';
+    if (!this.curierProfile.isActive) return 'Tasdiqlanmagan';
+    return this.curierProfile.isOnline ? 'Online' : 'Offline';
+  }
+
+  formatMoney(amount: number): string {
+    return new Intl.NumberFormat('uz-UZ').format(amount || 0) + " so'm";
+  }
+
   get displayName(): string {
     // Telegram user nomi
     const tgUser = this.tg.telegramUser;
@@ -703,20 +1204,20 @@ export class ProfileComponent implements OnInit, OnDestroy {
       return [tgUser.firstName, tgUser.lastName].filter(Boolean).join(' ');
     }
     // Backend dan
-    return this.currentCustomer?.name || this.authState.userName() || 'Foydalanuvchi';
+    return this.curierProfile?.name || this.currentCustomer?.name || this.authState.userName() || 'Foydalanuvchi';
   }
 
   get initials(): string {
-    const name = this.displayName;
-    const parts = name.split(' ').filter(Boolean);
+    const name = this.displayName.trim();
+    const parts = name.split(/\s+/).filter(Boolean);
     if (parts.length >= 2) {
-      return parts[0][0] + parts[1][0];
+      return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return name.slice(0, 2);
+    return (name.slice(0, 2) || 'F').toUpperCase();
   }
 
   get phoneNumber(): string {
-    return this.currentCustomer?.phoneNumber || '';
+    return this.curierProfile?.phoneNumber || this.currentCustomer?.phoneNumber || '';
   }
 
   get currentThemeLabel(): string {
@@ -732,6 +1233,7 @@ export class ProfileComponent implements OnInit, OnDestroy {
       case 'CompanyAdmin': return 'Kompaniya Admin';
       case 'BranchManager': return 'Filial Mudiri';
       case 'BranchAdmin': return 'Filial Admin';
+      case 'Curier': return 'Kuryer';
       default: return 'Mijoz';
     }
   }
@@ -743,6 +1245,7 @@ export class ProfileComponent implements OnInit, OnDestroy {
       case 'CompanyAdmin': return 'role-company-admin';
       case 'BranchManager': return 'role-branch-manager';
       case 'BranchAdmin': return 'role-branch-admin';
+      case 'Curier': return 'role-curier';
       default: return 'role-customer';
     }
   }
@@ -781,14 +1284,29 @@ export class ProfileComponent implements OnInit, OnDestroy {
 
   openHelp(): void {
     this.tg.hapticImpact('light');
-    // Telegram orqali bog'lanish
-    const supportUsername = environment.telegramSupportUsername;
-    const telegramUrl = `https://t.me/${supportUsername}`;
+    this.supportCopied = false;
+    this.showHelpModal = true;
+  }
+
+  closeHelp(): void {
+    this.showHelpModal = false;
+  }
+
+  copySupportHandle(): void {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(`@${this.supportUsername}`).then(() => {
+        this.supportCopied = true;
+      }).catch(() => {});
+    }
+  }
+
+  openTelegramSupport(): void {
+    const telegramUrl = `https://t.me/${this.supportUsername}`;
 
     if (this.tg.isMiniApp()) {
       this.tg.openTelegramLink(telegramUrl);
     } else {
-      window.open(telegramUrl, '_blank');
+      window.open(telegramUrl, '_blank', 'noopener,noreferrer');
     }
   }
 

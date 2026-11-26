@@ -100,7 +100,7 @@ import { CompanyBranch } from '../../../core/models/company-branch.model';
       </div>
 
       <!-- 5. Main Split View: Map (Left 70%) & Sidebar (Right 30%) -->
-      <main class="map-main-layout" *ngIf="!isLoading && !loadError">
+      <div class="map-main-layout" *ngIf="!isLoading && !loadError">
         <!-- LEFT: Map Container (~70%) -->
         <section class="map-viewport-section">
           <div id="branches-map" class="leaflet-map-canvas"></div>
@@ -220,7 +220,7 @@ import { CompanyBranch } from '../../../core/models/company-branch.model';
             </div>
           </div>
         </aside>
-      </main>
+      </div>
     </div>
   `,
   styles: [`

@@ -7,7 +7,7 @@ import { PaymentService } from '../../../core/services/payment.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
-import { PaymentListItem, PaymentSummary, PaymentStatus, PaymentFilter } from '../../../core/models/payment.model';
+import { PaymentListItem, PaymentSummary, PaymentStatus, PaymentFilter, isValidDisplayDate } from '../../../core/models/payment.model';
 import { Company } from '../../../core/models/company.model';
 import { CompanyBranch } from '../../../core/models/company-branch.model';
 import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-status-badge/payment-status-badge.component';
@@ -60,7 +60,9 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
           <div class="card-info">
             <span class="card-label">Tekshiruv Kutilmoqda</span>
             <div class="card-amount warning-text">{{ summary?.pendingAmount || 0 | number:'1.0-0' }} so‘m</div>
-            <div class="card-count">{{ summary?.pendingCount || 0 }} ta kutilmoqda</div>
+            <div class="card-count">
+              {{ summary?.pendingCheckCount ?? summary?.pendingCount ?? 0 }} ta chek<ng-container *ngIf="summary?.cashPendingCount"> · {{ summary?.cashPendingCount }} ta naqd</ng-container>
+            </div>
           </div>
         </div>
 
@@ -111,12 +113,12 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
           <!-- Status Dropdown -->
           <div class="filter-item">
             <label class="filter-label">To‘lov Holati</label>
-            <select class="form-control select-input" [(ngModel)]="selectedStatus" (ngModelChange)="applyFilter()">
-              <option value="">Barchasi</option>
-              <option [value]="PaymentStatus.Pending">Kutilmoqda (0)</option>
-              <option [value]="PaymentStatus.Completed">Tasdiqlangan (1)</option>
-              <option [value]="PaymentStatus.Failed">Rad etilgan (2)</option>
-              <option [value]="PaymentStatus.Cancelled">Bekor qilingan (4)</option>
+            <select class="form-control select-input" aria-label="To'lov holati filtri" [(ngModel)]="selectedStatus" (ngModelChange)="applyFilter()">
+              <option value="">Barchasi ({{ summary?.totalCount ?? 0 }})</option>
+              <option [value]="PaymentStatus.Pending">Kutilmoqda ({{ summary?.pendingCount ?? 0 }})</option>
+              <option [value]="PaymentStatus.Completed">Tasdiqlangan ({{ summary?.completedCount ?? 0 }})</option>
+              <option [value]="PaymentStatus.Failed">Rad etilgan ({{ summary?.failedCount ?? 0 }})</option>
+              <option [value]="PaymentStatus.Cancelled">Bekor qilingan ({{ summary?.cancelledCount ?? 0 }})</option>
             </select>
           </div>
 
@@ -268,7 +270,7 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
 
                 <!-- Buyurtma -->
                 <td class="td-order" (click)="$event.stopPropagation()">
-                  <a [routerLink]="['/orders']" class="order-link" title="Buyurtmalar ro'yxati">
+                  <a [routerLink]="['/orders']" [queryParams]="{ orderId: p.orderId }" class="order-link" title="Buyurtmani ko'rish">
                     #{{ p.orderId }}
                   </a>
                 </td>
@@ -302,10 +304,13 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
 
                 <!-- Sana -->
                 <td class="td-date">
-                  <div class="date-box">
+                  <div class="date-box" *ngIf="isValidDate(p.createdAt); else invalidCreatedDate">
                     <span class="date-main">{{ p.createdAt | date:'dd.MM.yyyy' }}</span>
                     <span class="date-time">{{ p.createdAt | date:'HH:mm' }}</span>
                   </div>
+                  <ng-template #invalidCreatedDate>
+                    <span class="date-main">—</span>
+                  </ng-template>
                 </td>
 
                 <!-- Amallar -->
@@ -321,9 +326,9 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
                       👁️ Ko‘rish
                     </button>
 
-                    <!-- Tezkor Tasdiqlash (faqat Pending holatda) -->
+                    <!-- Tezkor Tasdiqlash (faqat CardTransfer Pending holatda; Cash uchun yashirin) -->
                     <button 
-                      *ngIf="p.status === PaymentStatus.Pending"
+                      *ngIf="p.status === PaymentStatus.Pending && p.paymentMethod !== 'Cash'"
                       type="button" 
                       class="btn-action confirm" 
                       (click)="openConfirmModal(p)"
@@ -332,9 +337,9 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
                       ✓ Tasdiqlash
                     </button>
 
-                    <!-- Tezkor Rad etish (faqat Pending holatda) -->
+                    <!-- Tezkor Rad etish (faqat CardTransfer Pending holatda; Cash uchun yashirin) -->
                     <button 
-                      *ngIf="p.status === PaymentStatus.Pending"
+                      *ngIf="p.status === PaymentStatus.Pending && p.paymentMethod !== 'Cash'"
                       type="button" 
                       class="btn-action reject" 
                       (click)="openRejectModal(p)"
@@ -446,6 +451,9 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
           <div class="modal-body" *ngIf="selectedPaymentForAction">
             <p class="modal-text">
               <strong>#{{ selectedPaymentForAction.id }}</strong>-sonli to‘lovni rad etish sababini kiriting. Ushbu ma‘lumot mijozga ko‘rsatiladi.
+            </p>
+            <p style="font-size: 0.85rem; color: #b91c1c; background: #fee2e2; padding: 8px 10px; border-radius: 6px; margin-top: 8px;">
+              ⚠️ Diqqat: To'lov rad etilsa, buyurtma avtomatik bekor qilinadi va mahsulotlar omborga qaytariladi.
             </p>
 
             <div class="form-group mt-3">
@@ -1233,6 +1241,7 @@ export class AdminPaymentsListComponent implements OnInit, OnDestroy {
   pageSize = 10;
   totalItems = 0;
   totalPages = 1;
+  isValidDate = isValidDisplayDate;
 
   // Modals
   showConfirmModal = false;

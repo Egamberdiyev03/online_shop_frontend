@@ -1,7 +1,8 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
+import * as L from 'leaflet';
 import { Order, OrderItem, OrderStatus, OrderFilter, OrderStatusCounts, OrderPaymentFilter, parseOrderStatus } from '../../../core/models/order.model';
 import { CompanyBranch } from '../../../core/models/company-branch.model';
 import { Company } from '../../../core/models/company.model';
@@ -14,6 +15,9 @@ import { CustomerService } from '../../../core/services/customer.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { CommentService } from '../../../core/services/comment.service';
+import { CurierService } from '../../../core/services/curier.service';
+import { MapService, MapLocation, RouteEstimate } from '../../../core/services/map.service';
+import { CurierResponseDto, TransportTypeLabels, TransportTypeIcons } from '../../../core/models/curier.model';
 import { CreateCommentDto } from '../../../core/models/comment.model';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
@@ -21,6 +25,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 import { StatusChipsComponent } from '../../../shared/components/status-chips/status-chips.component';
 import { OrderFiltersComponent } from '../../../shared/components/order-filters/order-filters.component';
 import { OrderStepperComponent } from '../../../shared/components/dashboard/order-stepper/order-stepper.component';
+import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
 
 @Component({
   selector: 'app-orders-list',
@@ -34,7 +39,8 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
     EmptyStateComponent,
     StatusChipsComponent,
     OrderFiltersComponent,
-    OrderStepperComponent
+    OrderStepperComponent,
+    ImageUrlPipe
   ],
   template: `
     <div class="container">
@@ -142,8 +148,10 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
         [filter]="orderFilter"
         [branches]="availableBranches"
         [companies]="companies"
+        [curiers]="filterCuriers"
         [showBranchFilter]="showBranchDropdown"
         [showCompanyFilter]="showCompanyDropdown"
+        [showCurierFilter]="viewMode === 'all'"
         (filterChange)="onFilterChanged($event)"
         (reset)="onFilterReset()"
       ></app-order-filters>
@@ -171,7 +179,7 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       ></app-empty-state>
 
       <!-- Bo'sh holat: Faol buyurtmalar yo'q (viewMode === 'my') -->
-      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'active' && activeOrders.length === 0 && allOrders.length > 0) {
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'active' && activeOrders.length === 0 && allOrders.length > 0 && !hasActiveMyFilters) {
         <app-empty-state
           icon="✅"
           title="Faol buyurtmalar yo'q"
@@ -181,14 +189,34 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
         ></app-empty-state>
       }
 
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'active' && activeOrders.length === 0 && allOrders.length > 0 && hasActiveMyFilters) {
+        <app-empty-state
+          icon="🔍"
+          title="Bu filtr bo'yicha faol buyurtma topilmadi"
+          description="Qidiruv yoki filtrlash shartlarini o'zgartiring yoxud 'Eski' tabini tekshiring."
+          actionText="Filtrni tozalash"
+          (actionClick)="onFilterReset()"
+        ></app-empty-state>
+      }
+
       <!-- Bo'sh holat: Eski buyurtmalar yo'q (viewMode === 'my') -->
-      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'past' && pastOrders.length === 0 && allOrders.length > 0) {
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'past' && pastOrders.length === 0 && allOrders.length > 0 && !hasActiveMyFilters) {
         <app-empty-state
           icon="📦"
           title="Eski buyurtmalar yo'q"
           description="Yetkazilgan yoki bekor qilingan buyurtmalar hali mavjud emas."
           actionText="Faol buyurtmalarni ko'rish"
           (actionClick)="setActiveTab('active')"
+        ></app-empty-state>
+      }
+
+      @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'past' && pastOrders.length === 0 && allOrders.length > 0 && hasActiveMyFilters) {
+        <app-empty-state
+          icon="🔍"
+          title="Bu filtr bo'yicha eski buyurtma topilmadi"
+          description="Qidiruv yoki filtrlash shartlarini o'zgartirib ko'ring."
+          actionText="Filtrni tozalash"
+          (actionClick)="onFilterReset()"
         ></app-empty-state>
       }
 
@@ -217,11 +245,15 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'active' && displayedActiveOrders.length > 0) {
         <div class="orders-container">
           @for (order of displayedActiveOrders; track order.id) {
-            <div class="order-card card">
+            <div
+              class="order-card card"
+              [attr.id]="'order-card-' + order.id"
+              [class.order-highlight]="highlightedOrderId === order.id"
+            >
               <div class="order-header">
                 <div class="order-id-block">
                   <span class="order-number">Buyurtma #{{ order.id }}</span>
-                  <span class="order-date">{{ order.createdAt | date:'medium' }}</span>
+                  <span class="order-date">{{ order.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
                 </div>
                 <div class="header-right">
                   <a
@@ -248,6 +280,11 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
               <!-- Order Timeline Progress Stepper -->
               <div class="order-stepper-box">
                 <app-order-stepper [currentStatus]="order.status"></app-order-stepper>
+              </div>
+
+              <div class="order-delivery-strip" *ngIf="order.deliveryAddress">
+                <span>🏠 Yetkazish: <strong>{{ order.deliveryAddress }}</strong></span>
+                <span *ngIf="order.deliveryNotes" class="delivery-notes-chip">📝 {{ order.deliveryNotes }}</span>
               </div>
 
               <!-- Order Items Table -->
@@ -299,13 +336,48 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
                   </div>
                 </div>
 
+                <!-- Kuryer tayinlanishi kutilmoqda -->
+                <div class="curier-waiting-note" *ngIf="!order.curier && (order.status === OrderStatus.Pending || order.status === OrderStatus.Confirmed)">
+                  🛵 Kuryer tez orada tayinlanadi
+                </div>
+
                 <div class="order-actions">
+                  <button
+                    *ngIf="order.curier"
+                    type="button"
+                    class="btn btn-secondary btn-sm curier-info-btn"
+                    (click)="openCurierInfoModal(order); $event.stopPropagation()"
+                    title="Kuryer ma'lumotlarini ko'rish"
+                  >
+                    {{ getCurierVehicleIcon(order.curier.vehicleType) }} Kuryer
+                  </button>
                   <button
                     *ngIf="canCustomerPay(order)"
                     class="btn btn-primary btn-sm pay-btn"
                     (click)="openPayModal(order)"
                   >
-                    💳 {{ orderPayments.get(order.id) ? 'Chekni yangilash' : 'To'lov qilish' }}
+                    💳 {{ orderPayments.get(order.id) ? 'Chekni yangilash' : 'To\'lov qilish' }}
+                  </button>
+                  <button
+                    *ngIf="canAssignCurier(order)"
+                    class="btn btn-primary btn-sm"
+                    (click)="openAssignCurierModal(order)"
+                  >
+                    🛵 Kuryer biriktirish
+                  </button>
+                  <button
+                    *ngIf="canUnassignCurier(order)"
+                    class="btn btn-secondary btn-sm"
+                    (click)="unassignCurierFromOrder(order)"
+                  >
+                    ✖ Kuryerni olib tashlash
+                  </button>
+                  <button
+                    *ngIf="canTrackCurier(order)"
+                    class="btn btn-primary btn-sm"
+                    (click)="openTrackCurierModal(order)"
+                  >
+                    📍 Kuryerni kuzatish
                   </button>
                   <button
                     *ngIf="orderPayments.get(order.id)?.chekUrl"
@@ -357,7 +429,13 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
       @if (!isLoading && !hasError && viewMode === 'my' && activeTab === 'past' && displayedPastOrders.length > 0) {
         <div class="past-orders-container">
           @for (order of displayedPastOrders; track order.id) {
-            <div class="past-order-row" [class.expanded]="expandedOrderIds.has(order.id)" [class.cancelled]="order.status === OrderStatus.Cancelled">
+            <div
+              class="past-order-row"
+              [attr.id]="'order-card-' + order.id"
+              [class.order-highlight]="highlightedOrderId === order.id"
+              [class.expanded]="expandedOrderIds.has(order.id)"
+              [class.cancelled]="order.status === OrderStatus.Cancelled || order.status === OrderStatus.DeliveryFailed"
+            >
               <!-- Compact Header (Always visible) -->
               <div class="past-order-header" (click)="toggleOrderExpand(order.id)">
                 <div class="past-order-main">
@@ -403,6 +481,15 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
                     </div>
                     <div class="past-order-actions">
                       <button
+                        *ngIf="order.curier"
+                        type="button"
+                        class="btn btn-secondary btn-sm curier-info-btn"
+                        (click)="openCurierInfoModal(order); $event.stopPropagation()"
+                        title="Kuryer ma'lumotlarini ko'rish"
+                      >
+                        {{ getCurierVehicleIcon(order.curier.vehicleType) }} Kuryer
+                      </button>
+                      <button
                         *ngIf="canLeaveComment(order)"
                         class="btn btn-success btn-sm comment-btn"
                         (click)="openCommentModal(order); $event.stopPropagation()"
@@ -444,11 +531,16 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
 
       <!-- Orders List for 'all' mode (Admin/BranchManager) -->
       <div class="orders-container" *ngIf="!isLoading && !hasError && viewMode === 'all' && paginatedOrders.length > 0">
-        <div class="order-card card" *ngFor="let order of paginatedOrders">
+        <div
+          class="order-card card"
+          *ngFor="let order of paginatedOrders"
+          [attr.id]="'order-card-' + order.id"
+          [class.order-highlight]="highlightedOrderId === order.id"
+        >
           <div class="order-header">
             <div class="order-id-block">
               <span class="order-number">Buyurtma #{{ order.id }}</span>
-              <span class="order-date">{{ order.createdAt | date:'medium' }}</span>
+              <span class="order-date">{{ order.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
             </div>
 
             <div class="header-right">
@@ -479,6 +571,11 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
           <!-- Order Timeline Progress Stepper -->
           <div class="order-stepper-box">
             <app-order-stepper [currentStatus]="order.status"></app-order-stepper>
+          </div>
+
+          <div class="order-delivery-strip" *ngIf="order.deliveryAddress">
+            <span>🏠 Yetkazish: <strong>{{ order.deliveryAddress }}</strong></span>
+            <span *ngIf="order.deliveryNotes" class="delivery-notes-chip">📝 {{ order.deliveryNotes }}</span>
           </div>
 
           <!-- Order Items Table -->
@@ -533,7 +630,21 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
               </div>
             </div>
 
+            <!-- Kuryer tayinlanishi kutilmoqda -->
+            <div class="curier-waiting-note" *ngIf="!order.curier && (order.status === OrderStatus.Pending || order.status === OrderStatus.Confirmed)">
+              🛵 Kuryer tez orada tayinlanadi
+            </div>
+
             <div class="order-actions">
+              <button
+                *ngIf="order.curier"
+                type="button"
+                class="btn btn-secondary btn-sm curier-info-btn"
+                (click)="openCurierInfoModal(order); $event.stopPropagation()"
+                title="Kuryer ma'lumotlarini ko'rish"
+              >
+                {{ getCurierVehicleIcon(order.curier.vehicleType) }} Kuryer
+              </button>
               <!-- Customer: Pay / Upload Receipt Button (Faqat mijoz uchun, Admin/BranchManager ga ko'rinmaydi) -->
               <button
                 *ngIf="canCustomerPay(order)"
@@ -541,6 +652,29 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
                 (click)="openPayModal(order)"
               >
                 💳 {{ orderPayments.get(order.id) ? 'Chekni yangilash' : 'To‘lov qilish' }}
+              </button>
+
+              <!-- Admin: Kuryer biriktirish / olib tashlash -->
+              <button
+                *ngIf="canAssignCurier(order)"
+                class="btn btn-primary btn-sm"
+                (click)="openAssignCurierModal(order)"
+              >
+                🛵 Kuryer biriktirish
+              </button>
+              <button
+                *ngIf="canUnassignCurier(order)"
+                class="btn btn-secondary btn-sm"
+                (click)="unassignCurierFromOrder(order)"
+              >
+                ✖ Kuryerni olib tashlash
+              </button>
+              <button
+                *ngIf="canTrackCurier(order)"
+                class="btn btn-primary btn-sm"
+                (click)="openTrackCurierModal(order)"
+              >
+                📍 Kuryerni kuzatish
               </button>
 
               <!-- View Receipt Button (Chek rasmi bo'lsa barchaga ko'rinadi) -->
@@ -593,8 +727,10 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
 
               <!-- Admin Status Change Dropdown -->
               <div class="admin-status-changer" *ngIf="authState.isAdminMode() || authState.isAdminRole()">
-                <label class="status-label">Statusni o'zgartirish:</label>
+                <label class="status-label" [attr.for]="'status-select-' + order.id">Statusni o'zgartirish:</label>
                 <select 
+                  [attr.id]="'status-select-' + order.id"
+                  aria-label="Buyurtma holatini o'zgartirish"
                   [ngModel]="order.status" 
                   (ngModelChange)="updateStatus(order, $event)"
                   class="form-control status-select"
@@ -698,81 +834,106 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
           </div>
 
           <div class="modal-body" *ngIf="currentOrderForPay">
-            <!-- Compact Bank Card Box -->
-            <div class="compact-card-box">
-              <div class="card-top-row">
-                <span class="card-brand-badge">💳 HUMO / UZCARD</span>
-                <span class="card-brand-sub">Rasmiy to‘lov kartasi</span>
-              </div>
-              <div class="card-num-row">
-                <span class="card-num-text">9860 3501 2345 6789</span>
-                <button type="button" class="copy-pill-btn" (click)="copyCardNumber('9860350123456789')" title="Nusxa olish">
-                  📋 Nusxa
-                </button>
-              </div>
-              <div class="card-holder-text">
-                OnlineShop Rasmiy Hisobi (Asadbek E.)
+            <!-- Payment Method Selector -->
+            <div class="form-group-compact" style="margin-bottom: 12px;">
+              <label class="form-sub-label">To‘lov usulini tanlang *</label>
+              <div class="payment-method-radios" style="display: flex; gap: 10px;">
+                <label class="radio-option" style="flex: 1;">
+                  <input type="radio" name="customerPayMethod" [(ngModel)]="customerPaymentMethod" value="CardTransfer" />
+                  <span>💳 Karta orqali</span>
+                </label>
+                <label class="radio-option" style="flex: 1;">
+                  <input type="radio" name="customerPayMethod" [(ngModel)]="customerPaymentMethod" value="Cash" />
+                  <span>💵 Naqd (Kuryerga)</span>
+                </label>
               </div>
             </div>
 
-            <!-- Pay Amount & Concise Guide -->
-            <div class="pay-summary-strip">
-              <div class="amount-side">
-                <span class="label">To‘lanadigan summa:</span>
-                <span class="val">{{ currentOrderForPay.totalPrice | number:'1.0-0' }} so‘m</span>
-              </div>
-              <div class="guide-side">
-                <span>💡 Karta raqamiga to‘lov qilib, chek skrinshotini yuklang.</span>
-              </div>
-            </div>
-
-            <!-- File Upload -->
-            <div class="form-group-compact">
-              <label class="form-sub-label">To‘lov cheki rasmi (skrinshot) *</label>
-              <div 
-                class="file-drop-area-compact" 
-                (click)="fileInput.click()"
-                (dragover)="$event.preventDefault()"
-                (drop)="onFileDrop($event)"
-              >
-                <input
-                  #fileInput
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  (change)="onFileSelected($event)"
-                  style="display: none"
-                />
-
-                <div class="drop-empty" *ngIf="!selectedFilePreview">
-                  <span class="drop-icon">📎</span>
-                  <div class="drop-texts">
-                    <strong>Chek rasmini tanlash uchun bosing</strong>
-                    <small>(JPG, PNG, WEBP, maks 5 MB)</small>
-                  </div>
+            <ng-container *ngIf="customerPaymentMethod === 'CardTransfer'">
+              <!-- Compact Bank Card Box -->
+              <div class="compact-card-box">
+                <div class="card-top-row">
+                  <span class="card-brand-badge">💳 HUMO / UZCARD</span>
+                  <span class="card-brand-sub">Rasmiy to‘lov kartasi</span>
                 </div>
-
-                <div class="drop-filled" *ngIf="selectedFilePreview">
-                  <img [src]="selectedFilePreview" alt="Chek rasmi" class="receipt-thumb" />
-                  <div class="filled-info">
-                    <span class="file-name">{{ selectedReceiptFile?.name || 'Chek rasmi yuklangan' }}</span>
-                    <span class="file-size" *ngIf="selectedReceiptFile">({{ (selectedReceiptFile.size / 1024).toFixed(0) }} KB)</span>
-                    <span class="change-action">🔄 O‘zgartirish uchun bosing</span>
-                  </div>
-                  <button type="button" class="btn-remove-file" (click)="removeSelectedFile($event)" title="O‘chirish">
-                    ✕
+                <div class="card-num-row">
+                  <span class="card-num-text">9860 3501 2345 6789</span>
+                  <button type="button" class="copy-pill-btn" (click)="copyCardNumber('9860350123456789')" title="Nusxa olish">
+                    📋 Nusxa
                   </button>
                 </div>
+                <div class="card-holder-text">
+                  OnlineShop Rasmiy Hisobi (Asadbek E.)
+                </div>
               </div>
+
+              <!-- Pay Amount & Concise Guide -->
+              <div class="pay-summary-strip">
+                <div class="amount-side">
+                  <span class="label">To‘lanadigan summa:</span>
+                  <span class="val">{{ currentOrderForPay.totalPrice | number:'1.0-0' }} so‘m</span>
+                </div>
+                <div class="guide-side">
+                  <span>💡 Karta raqamiga to‘lov qilib, chek skrinshotini yuklang.</span>
+                </div>
+              </div>
+
+              <!-- File Upload -->
+              <div class="form-group-compact">
+                <label class="form-sub-label">To‘lov cheki rasmi (skrinshot / PDF) *</label>
+                <div 
+                  class="file-drop-area-compact" 
+                  (click)="fileInput.click()"
+                  (dragover)="$event.preventDefault()"
+                  (drop)="onFileDrop($event)"
+                >
+                  <input
+                    #fileInput
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                    (change)="onFileSelected($event)"
+                    style="display: none"
+                  />
+
+                  <div class="drop-empty" *ngIf="!selectedFilePreview && !selectedReceiptFile">
+                    <span class="drop-icon">📎</span>
+                    <div class="drop-texts">
+                      <strong>Chek faylini tanlash uchun bosing</strong>
+                      <small>(JPG, JPEG, PNG, PDF, maks 5 MB)</small>
+                    </div>
+                  </div>
+
+                  <div class="drop-filled" *ngIf="selectedFilePreview || selectedReceiptFile">
+                    <img *ngIf="selectedFilePreview && !selectedReceiptFile?.name?.toLowerCase()?.endsWith('.pdf')" [src]="selectedFilePreview" alt="Chek rasmi" class="receipt-thumb" />
+                    <span *ngIf="selectedReceiptFile?.name?.toLowerCase()?.endsWith('.pdf')" style="font-size: 1.75rem;">📄</span>
+                    <div class="filled-info">
+                      <span class="file-name">{{ selectedReceiptFile?.name || 'Chek rasmi yuklangan' }}</span>
+                      <span class="file-size" *ngIf="selectedReceiptFile">({{ (selectedReceiptFile.size / 1024).toFixed(0) }} KB)</span>
+                      <span class="change-action">🔄 O‘zgartirish uchun bosing</span>
+                    </div>
+                    <button type="button" class="btn-remove-file" (click)="removeSelectedFile($event)" title="O‘chirish">
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
+
+            <div class="cash-info-banner" *ngIf="customerPaymentMethod === 'Cash'" style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 12px; margin-bottom: 12px; color: #065f46;">
+              <strong>💵 Pulni kuryerga topshirasiz</strong>
+              <p style="margin: 4px 0 0; font-size: 0.85rem;">
+                To‘lanadigan summa: <strong>{{ currentOrderForPay.totalPrice | number:'1.0-0' }} so‘m</strong>. Chek yuklash talab qilinmaydi.
+              </p>
             </div>
 
             <!-- Transaction Note -->
             <div class="form-group-compact">
-              <label class="form-sub-label">Qo‘shimcha izoh / Karta egasi ismi (ixtiyoriy)</label>
+              <label class="form-sub-label">Qo‘shimcha izoh (ixtiyoriy)</label>
               <input
                 type="text"
                 class="form-control form-control-sm"
                 [(ngModel)]="payTransactionNote"
-                placeholder="Masalan: 9860 **** 1234 dan Aliyev V."
+                [placeholder]="customerPaymentMethod === 'Cash' ? 'Masalan: Qaytim tayyorlab keling' : 'Masalan: 9860 **** 1234 dan Aliyev V.'"
               />
             </div>
           </div>
@@ -784,11 +945,11 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
             <button
               type="button"
               class="btn btn-primary btn-sm submit-pay-btn"
-              [disabled]="isSubmittingPay || (!selectedReceiptFile && !currentOrderExistingChekUrl)"
+              [disabled]="isSubmittingPay || (customerPaymentMethod === 'CardTransfer' && !selectedReceiptFile && !currentOrderExistingChekUrl)"
               (click)="submitPaymentReceipt()"
             >
               <span *ngIf="isSubmittingPay" class="btn-spinner"></span>
-              {{ isSubmittingPay ? 'Yuborilmoqda...' : 'To‘lov chekini yuborish' }}
+              {{ isSubmittingPay ? 'Yuborilmoqda...' : (customerPaymentMethod === 'Cash' ? 'Naqd to‘lovni tasdiqlash' : 'To‘lov chekini yuborish') }}
             </button>
           </div>
         </div>
@@ -916,6 +1077,9 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
             <!-- Rejection Reason Input (shown only if rejecting) -->
             <div class="reject-box" *ngIf="showRejectReasonInput" id="adminRejectBox">
               <label class="form-sub-label text-danger fw-bold">⚠️ Rad etish sababini kiriting (majburiy):</label>
+              <p style="font-size: 0.8rem; color: #b91c1c; margin: 4px 0 8px;">
+                Diqqat: To'lov rad etilsa, buyurtma avtomatik bekor qilinadi va mahsulotlar omborga qaytariladi.
+              </p>
               <textarea
                 id="adminRejectReasonInput"
                 class="form-control reject-textarea"
@@ -936,8 +1100,8 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
               Yopish
             </button>
 
-            <!-- Case A: Payment Pending -> Reject or Approve -->
-            <ng-container *ngIf="adminReviewPayment && isPaymentPending(adminReviewPayment)">
+            <!-- Case A: CardTransfer Payment Pending -> Reject or Approve (Cash uchun yashirin) -->
+            <ng-container *ngIf="adminReviewPayment && isPaymentPending(adminReviewPayment) && adminReviewPayment.paymentMethod !== 'Cash'">
               <button
                 *ngIf="!showRejectReasonInput"
                 type="button"
@@ -992,6 +1156,202 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
         </div>
       </div>
 
+      <!-- Assign Curier Modal (Admin / BranchManager) -->
+      <div class="modal-overlay" *ngIf="showAssignCurierModal" (click)="closeAssignCurierModal()">
+        <div class="modal-content" (click)="$event.stopPropagation()" style="max-width: 460px;">
+          <div class="modal-header">
+            <h3 class="modal-title">🛵 Kuryer biriktirish (#{{ orderForAssignCurier?.id }})</h3>
+            <button class="modal-close" (click)="closeAssignCurierModal()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p *ngIf="isLoadingCuriers" style="text-align: center; color: #64748b;">Faol va online kuryerlar yuklanmoqda...</p>
+
+            <div *ngIf="!isLoadingCuriers && availableCuriers.length === 0" style="padding: 16px; background: #fef3c7; border-radius: 8px; color: #92400e;">
+              Hozircha faol va online kuryerlar mavjud emas.
+            </div>
+
+            <div *ngIf="!isLoadingCuriers && availableCuriers.length > 0" class="curier-select-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
+              <label
+                *ngFor="let c of availableCuriers"
+                class="radio-option"
+                style="display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;"
+              >
+                <input type="radio" name="selectedCurier" [value]="c.id" [(ngModel)]="selectedCurierId" />
+                <span style="font-size: 1.25rem;">{{ getCurierVehicleIcon(c.vehicleType) }}</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600;">{{ c.name }}</div>
+                  <div style="font-size: 0.8rem; color: #64748b;">{{ getCurierVehicleLabel(c.vehicleType) }} • {{ c.phoneNumber }}</div>
+                </div>
+                <span style="font-size: 0.75rem; background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 99px;">Online</span>
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" (click)="closeAssignCurierModal()" [disabled]="isAssigningCurier">
+              Bekor qilish
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              (click)="confirmAssignCurier()"
+              [disabled]="isAssigningCurier || !selectedCurierId"
+            >
+              {{ isAssigningCurier ? 'Biriktirilmoqda...' : 'Biriktirish' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Curier Info Modal -->
+      <div class="modal-overlay" *ngIf="showCurierInfoModal && curierInfoOrder?.curier as curier" (click)="closeCurierInfoModal()">
+        <div class="modal-content curier-info-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3 class="modal-title">🛵 Kuryer ma'lumotlari (#{{ curierInfoOrder?.id }})</h3>
+            <button type="button" class="modal-close" (click)="closeCurierInfoModal()" aria-label="Yopish">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="curier-modal-profile">
+              <div class="curier-modal-avatar-wrap">
+                <img
+                  *ngIf="hasValidCurierPhoto(curier.profilePictureUrl) && !failedCurierAvatarIds.has(curier.id)"
+                  [src]="curier.profilePictureUrl | imageUrl"
+                  (error)="onCurierAvatarError(curier.id)"
+                  [alt]="curier.name"
+                  class="curier-modal-avatar"
+                />
+                <span
+                  *ngIf="!hasValidCurierPhoto(curier.profilePictureUrl) || failedCurierAvatarIds.has(curier.id)"
+                  class="curier-modal-initials"
+                >
+                  {{ getCurierInitials(curier.name) }}
+                </span>
+              </div>
+              <div class="curier-modal-details">
+                <div class="curier-modal-name">{{ curier.name }}</div>
+                <div class="curier-modal-vehicle">
+                  <span>{{ getCurierVehicleIcon(curier.vehicleType) }}</span>
+                  <span>{{ getCurierVehicleLabel(curier.vehicleType) }}</span>
+                </div>
+                <a
+                  *ngIf="curier.phoneNumber"
+                  [href]="'tel:' + curier.phoneNumber"
+                  class="btn btn-secondary btn-sm curier-modal-phone"
+                >
+                  📞 {{ curier.phoneNumber }}
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              *ngIf="curierInfoOrder && canTrackCurier(curierInfoOrder)"
+              type="button"
+              class="btn btn-primary btn-sm"
+              (click)="openTrackFromCurierModal()"
+            >
+              📍 Jonli kuzatish
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" (click)="closeCurierInfoModal()">
+              Yopish
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Track Curier Live Map Modal (Admin only) -->
+      <div class="modal-overlay" *ngIf="showTrackCurierModal" (click)="closeTrackCurierModal()">
+        <div class="modal-content track-curier-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3 class="modal-title">📍 Buyurtma #{{ trackingOrder?.id }} — Jonli kuzatuv</h3>
+            <button class="modal-close" (click)="closeTrackCurierModal()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <!-- Curier summary bar -->
+            <div *ngIf="trackedCurier" class="track-curier-card">
+              <div class="track-curier-identity">
+                <span class="track-curier-icon">{{ getCurierVehicleIcon(trackedCurier.vehicleType) }}</span>
+                <div>
+                  <div class="track-curier-name">{{ trackedCurier.name }}</div>
+                  <div class="track-curier-meta">
+                    {{ getCurierVehicleLabel(trackedCurier.vehicleType) }} ·
+                    <span [style.color]="trackedCurier.isOnline ? '#16a34a' : '#64748b'">
+                      {{ trackedCurier.isOnline ? '🟢 Online' : '⚫ Offline' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="track-curier-actions">
+                <a *ngIf="trackedCurier.phoneNumber" [href]="'tel:' + trackedCurier.phoneNumber" class="btn btn-secondary btn-sm">
+                  📞 {{ trackedCurier.phoneNumber }}
+                </a>
+                <button type="button" class="btn btn-secondary btn-sm" (click)="refreshTrackedCurier()" [disabled]="isLoadingTrack" title="Yangilash">
+                  🔄
+                </button>
+              </div>
+            </div>
+
+            <!-- ETA & Route Summary Card -->
+            <div *ngIf="trackEstimate || trackingOrder?.deliveryAddress" class="track-eta-card">
+              <div class="track-eta-top" *ngIf="trackEstimate">
+                <div class="track-eta-main">
+                  <span class="track-eta-badge">⏱️ Taxminiy vaqt: <strong>{{ trackEstimate.minMinutes }}–{{ trackEstimate.maxMinutes }} daqiqa</strong></span>
+                  <span class="track-eta-dist">📏 {{ trackEstimate.distanceKm }} km</span>
+                </div>
+                <span class="track-eta-sub">{{ trackLegLabel }} · {{ trackEstimate.isRoadRoute ? "ko'chalar bo'yicha" : 'taxminiy masofa' }}</span>
+              </div>
+              <div class="track-address-row" *ngIf="trackingOrder">
+                <span>🏢 <strong>Filial:</strong> {{ getBranchName(trackingOrder.companyBranchId) }}</span>
+                <span *ngIf="trackingOrder.deliveryAddress">🏠 <strong>Manzil:</strong> {{ trackingOrder.deliveryAddress }}</span>
+                <span *ngIf="trackingOrder.deliveryNotes" class="track-notes-text">📝 {{ trackingOrder.deliveryNotes }}</span>
+              </div>
+            </div>
+
+            <!-- Map Legend -->
+            <div class="track-legend" *ngIf="hasAnyTrackMapPoint">
+              <span><span class="legend-dot dot-branch"></span> Filial</span>
+              <span><span class="legend-dot dot-curier"></span> Kuryer</span>
+              <span><span class="legend-dot dot-delivery"></span> Yetkazish manzili</span>
+            </div>
+
+            <div *ngIf="isLoadingTrack && !trackedCurier" class="track-loading-box">
+              Kuryer va marshrut ma'lumotlari yuklanmoqda...
+            </div>
+
+            <div
+              id="order-curier-track-map"
+              class="track-map-canvas"
+              [style.display]="hasAnyTrackMapPoint ? 'block' : 'none'"
+            ></div>
+
+            <div
+              *ngIf="trackedCurier && (trackedCurier.latitude == null || trackedCurier.longitude == null)"
+              class="track-warning-box"
+            >
+              Kuryer hozircha GPS joylashuvini yubormagan (Online bo'lganda har 15 soniyada avtomatik yangilanadi).
+            </div>
+
+            <div
+              *ngIf="trackingOrder && !hasDeliveryCoords(trackingOrder)"
+              class="track-info-hint"
+            >
+              ℹ️ Buyurtmada yetkazish nuqtasi koordinatasi saqlanmagan — xaritada mavjud nuqtalar ko'rsatilmoqda.
+            </div>
+
+            <div *ngIf="hasAnyTrackMapPoint" class="track-footer-meta">
+              <span>Har 10 soniyada yangilanadi<ng-container *ngIf="trackLastUpdated"> · {{ trackLastUpdated | date:'HH:mm:ss' }}</ng-container></span>
+              <a *ngIf="getTrackGoogleMapsUrl() as gUrl" [href]="gUrl" target="_blank" rel="noopener noreferrer" class="track-gmaps-link">
+                Google Maps ↗
+              </a>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary btn-sm" (click)="closeTrackCurierModal()">
+              Yopish
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- View Receipt Modal (Enlarged) -->
       <div class="modal-overlay" *ngIf="showReceiptViewerModal" (click)="closeReceiptViewerModal()">
         <div class="modal-content viewer-modal" (click)="$event.stopPropagation()">
@@ -1000,7 +1360,14 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
             <button class="modal-close" (click)="closeReceiptViewerModal()">&times;</button>
           </div>
           <div class="modal-body text-center">
-            <img [src]="viewingReceiptUrl" alt="Chek rasmi" class="viewer-img" />
+            <img *ngIf="!isPdfUrl(viewingReceiptUrl)" [src]="viewingReceiptUrl" alt="Chek rasmi" class="viewer-img" />
+            <div *ngIf="isPdfUrl(viewingReceiptUrl)" class="pdf-viewer-box">
+              <div class="pdf-icon">📄</div>
+              <p class="pdf-label">PDF to‘lov cheki</p>
+              <a [href]="viewingReceiptUrl" target="_blank" rel="noopener" class="btn btn-secondary">
+                PDF ni yangi oynada ochish &rarr;
+              </a>
+            </div>
           </div>
           <div class="modal-footer">
             <a [href]="viewingReceiptUrl" target="_blank" download class="btn btn-secondary">
@@ -1032,7 +1399,7 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
               </div>
               <div class="summary-row">
                 <span>Sana:</span>
-                <span>{{ orderToCancel.createdAt | date:'medium' }}</span>
+                <span>{{ orderToCancel.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
               </div>
             </div>
             <p class="cancel-warning-note">
@@ -2598,15 +2965,295 @@ import { OrderStepperComponent } from '../../../shared/components/dashboard/orde
     :host-context(.dark-theme) .total-highlight {
       color: #c7d2fe !important;
     }
+
+    /* Order Delivery Strip & Live Track Modal */
+    .order-delivery-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      background: var(--bg-subtle, #f8fafc);
+      border: 1px solid var(--border, #e2e8f0);
+      font-size: 0.85rem;
+      color: var(--text-main, #1e293b);
+    }
+    .delivery-notes-chip {
+      color: var(--text-muted, #64748b);
+      font-size: 0.82rem;
+    }
+    .track-curier-modal {
+      max-width: 640px;
+      width: 95%;
+    }
+    .track-curier-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--bg-subtle, #f1f5f9);
+      border: 1px solid var(--border, #e2e8f0);
+    }
+    .track-curier-identity {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .track-curier-icon {
+      font-size: 1.5rem;
+    }
+    .track-curier-name {
+      font-weight: 700;
+      color: var(--text-main, #0f172a);
+    }
+    .track-curier-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted, #64748b);
+    }
+    .track-curier-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .track-eta-card {
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(79, 70, 229, 0.08);
+      border: 1px solid rgba(79, 70, 229, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .track-eta-top {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .track-eta-main {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .track-eta-badge {
+      font-size: 0.92rem;
+      color: var(--text-main, #1e1b4b);
+    }
+    .track-eta-dist {
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: #4f46e5;
+    }
+    .track-eta-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted, #64748b);
+    }
+    .track-address-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 0.82rem;
+      color: var(--text-main, #334155);
+      border-top: 1px dashed rgba(79, 70, 229, 0.22);
+      padding-top: 6px;
+    }
+    .track-notes-text {
+      color: var(--text-muted, #64748b);
+    }
+    .track-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 8px;
+      font-size: 0.78rem;
+      color: var(--text-muted, #475569);
+    }
+    .track-legend > span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      border: 1.5px solid #ffffff;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+    }
+    .dot-branch { background: #4f46e5; }
+    .dot-curier { background: #16a34a; }
+    .dot-delivery { background: #ef4444; }
+    .track-loading-box {
+      text-align: center;
+      padding: 20px;
+      color: var(--text-muted, #64748b);
+    }
+    .track-map-canvas {
+      height: 340px;
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border, #e2e8f0);
+    }
+    .track-warning-box {
+      margin-top: 10px;
+      padding: 12px;
+      text-align: center;
+      border-radius: 10px;
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 0.85rem;
+    }
+    .track-info-hint {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: var(--text-muted, #64748b);
+    }
+    .track-footer-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: var(--text-muted, #64748b);
+    }
+    .track-gmaps-link {
+      color: var(--primary, #4f46e5);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    :host-context(body.dark-theme) .track-eta-card,
+    :host-context(.dark-theme) .track-eta-card {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(129, 140, 248, 0.35);
+    }
+    :host-context(body.dark-theme) .track-eta-dist,
+    :host-context(.dark-theme) .track-eta-dist,
+    :host-context(body.dark-theme) .track-gmaps-link,
+    :host-context(.dark-theme) .track-gmaps-link {
+      color: #a5b4fc;
+    }
+    :host-context(body.dark-theme) .track-warning-box,
+    :host-context(.dark-theme) .track-warning-box {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fde68a;
+    }
+    .order-highlight {
+      border-color: #6366f1 !important;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.28), 0 8px 24px rgba(99, 102, 241, 0.14) !important;
+    }
+    .pdf-viewer-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 1.5rem 1rem;
+    }
+    .pdf-viewer-box .pdf-icon {
+      font-size: 3rem;
+      line-height: 1;
+    }
+    .pdf-viewer-box .pdf-label {
+      margin: 0;
+      font-weight: 600;
+      color: var(--text-main, #1e293b);
+    }
+    .curier-info-modal {
+      max-width: 420px;
+      width: 94%;
+    }
+    .curier-modal-profile {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .curier-modal-avatar-wrap {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 1.25rem;
+      border: 2px solid rgba(99, 102, 241, 0.25);
+    }
+    .curier-modal-avatar {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .curier-modal-initials {
+      letter-spacing: 0.03em;
+    }
+    .curier-modal-details {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+    .curier-modal-name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main, #0f172a);
+    }
+    .curier-modal-vehicle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.875rem;
+      color: var(--text-muted, #475569);
+    }
+    .curier-modal-phone {
+      margin-top: 0.25rem;
+      align-self: flex-start;
+    }
+    .curier-waiting-note {
+      font-size: 0.84rem;
+      color: var(--text-muted, #475569);
+      padding: 0.35rem 0.65rem;
+      background: var(--bg-subtle, #f1f5f9);
+      border-radius: 8px;
+    }
+    :host-context(body.dark-theme) .curier-modal-name,
+    :host-context(.dark-theme) .curier-modal-name {
+      color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .curier-modal-vehicle,
+    :host-context(.dark-theme) .curier-modal-vehicle,
+    :host-context(body.dark-theme) .curier-waiting-note,
+    :host-context(.dark-theme) .curier-waiting-note {
+      color: #cbd5e1;
+    }
+    :host-context(body.dark-theme) .curier-waiting-note,
+    :host-context(.dark-theme) .curier-waiting-note {
+      background: #1e293b;
+    }
   `]
 })
-export class OrdersListComponent implements OnInit {
+export class OrdersListComponent implements OnInit, OnDestroy {
   private orderService = inject(OrderService);
   private companyService = inject(CompanyService);
   public paymentService = inject(PaymentService);
   public customerService = inject(CustomerService);
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
+  private mapService = inject(MapService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
@@ -2648,6 +3295,7 @@ export class OrdersListComponent implements OnInit {
     search: null,
     branchId: null,
     companyId: null,
+    curierProfileId: null,
     dateFrom: null,
     dateTo: null,
     paymentStatus: 'all',
@@ -2656,14 +3304,18 @@ export class OrdersListComponent implements OnInit {
     pageSize: 5
   };
 
+  filterCuriers: { id: number; name: string }[] = [];
+
   // Status counts (calculated over all customer/role orders, independent of active filters)
   statusCounts: OrderStatusCounts = {
     all: 0,
     pending: 0,
     confirmed: 0,
+    assigned: 0,
     shipped: 0,
     delivered: 0,
-    cancelled: 0
+    cancelled: 0,
+    failed: 0
   };
 
   // Payments map: orderId -> Payment
@@ -2672,11 +3324,45 @@ export class OrdersListComponent implements OnInit {
   // Customer Pay Modal state
   showPayModal = false;
   currentOrderForPay: Order | null = null;
+  customerPaymentMethod: 'CardTransfer' | 'Cash' = 'CardTransfer';
   selectedReceiptFile: File | null = null;
   selectedFilePreview: string | null = null;
   payTransactionNote = '';
   isSubmittingPay = false;
   currentOrderExistingChekUrl: string | null = null;
+
+  // Assign Curier Modal state
+  private curierService = inject(CurierService);
+  showAssignCurierModal = false;
+  orderForAssignCurier: Order | null = null;
+  availableCuriers: CurierResponseDto[] = [];
+  selectedCurierId: number = 0;
+  isLoadingCuriers = false;
+  isAssigningCurier = false;
+
+  // Curier Info Modal state
+  showCurierInfoModal = false;
+  curierInfoOrder: Order | null = null;
+
+  // Track Curier Live Map Modal state (Admin only)
+  showTrackCurierModal = false;
+  trackingOrder: Order | null = null;
+  trackedCurier: CurierResponseDto | null = null;
+  isLoadingTrack = false;
+  trackLastUpdated: Date | null = null;
+  trackEstimate: RouteEstimate | null = null;
+  trackLegLabel = '';
+  failedCurierAvatarIds = new Set<number>();
+  private trackTimer: any = null;
+  private trackMap?: L.Map;
+  private trackCurierMarker?: L.Marker;
+  private trackBranchMarker?: L.Marker;
+  private trackDeliveryMarker?: L.Marker;
+  private trackRouteLayer?: L.Polyline;
+  private trackBoundsFitted = false;
+  private lastRouteKey = '';
+  private lastRouteCurierLoc: MapLocation | null = null;
+  private trackSessionId = 0;
 
   // Admin Review Modal state
   showAdminPaymentModal = false;
@@ -2709,8 +3395,8 @@ export class OrdersListComponent implements OnInit {
 
   // === NEW TAB SYSTEM STATE (Faol / Eski) ===
   readonly ORDERS_PAGE_SIZE = 10;
-  readonly ACTIVE_STATUSES = [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Shipped];
-  readonly PAST_STATUSES = [OrderStatus.Delivered, OrderStatus.Cancelled];
+  readonly ACTIVE_STATUSES = [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.AssignedToCourier, OrderStatus.Shipped];
+  readonly PAST_STATUSES = [OrderStatus.Delivered, OrderStatus.Cancelled, OrderStatus.DeliveryFailed];
 
   activeTab: 'active' | 'past' = 'active';
   activeOrders: Order[] = [];
@@ -2719,13 +3405,30 @@ export class OrdersListComponent implements OnInit {
   displayedActiveCount = 10;
   displayedPastCount = 10;
   expandedOrderIds: Set<number> = new Set();
+  highlightedOrderId: number | null = null;
+  private inFlightCustomerIds: Set<number> = new Set();
+
+  get hasActiveMyFilters(): boolean {
+    const f = this.orderFilter;
+    return !!(
+      (f.search && f.search.trim()) ||
+      (f.branchId !== null && f.branchId !== undefined) ||
+      f.dateFrom ||
+      f.dateTo ||
+      (f.paymentStatus && f.paymentStatus !== 'all') ||
+      (f.sortBy && f.sortBy !== 'createdAt_desc')
+    );
+  }
 
   get filteredPastOrders(): Order[] {
     if (this.pastFilterStatus === 'all') return this.pastOrders;
     if (this.pastFilterStatus === 'delivered') {
-      return this.pastOrders.filter(o => o.status === OrderStatus.Delivered);
+      return this.pastOrders.filter(o => parseOrderStatus(o.status) === OrderStatus.Delivered);
     }
-    return this.pastOrders.filter(o => o.status === OrderStatus.Cancelled);
+    return this.pastOrders.filter(o => {
+      const st = parseOrderStatus(o.status);
+      return st === OrderStatus.Cancelled || st === OrderStatus.DeliveryFailed;
+    });
   }
 
   get displayedActiveOrders(): Order[] {
@@ -2737,11 +3440,14 @@ export class OrdersListComponent implements OnInit {
   }
 
   get deliveredCount(): number {
-    return this.pastOrders.filter(o => o.status === OrderStatus.Delivered).length;
+    return this.pastOrders.filter(o => parseOrderStatus(o.status) === OrderStatus.Delivered).length;
   }
 
   get cancelledCount(): number {
-    return this.pastOrders.filter(o => o.status === OrderStatus.Cancelled).length;
+    return this.pastOrders.filter(o => {
+      const st = parseOrderStatus(o.status);
+      return st === OrderStatus.Cancelled || st === OrderStatus.DeliveryFailed;
+    }).length;
   }
 
   get showBranchDropdown(): boolean {
@@ -2757,6 +3463,7 @@ export class OrdersListComponent implements OnInit {
     this.loadBranches();
     this.loadCompanies();
     this.loadCustomers();
+    this.loadFilterCuriers();
 
     if (this.authState.isAdminMode() || this.authState.isAdminRole()) {
       this.viewMode = 'all';
@@ -2766,7 +3473,7 @@ export class OrdersListComponent implements OnInit {
       this.viewMode = 'all';
     }
 
-    // Subscribe to query params changes (back/forward navigation support)
+    // Subscribe to query params changes (back/forward navigation & deep-linking support)
     this.route.queryParams.subscribe(params => {
       this.applyParamsToFilter(params);
       // Handle tab param for 'my' mode
@@ -2778,10 +3485,16 @@ export class OrdersListComponent implements OnInit {
       }
       if (this.allOrders.length > 0) {
         this.applyFilters(false);
+        this.focusTargetOrderIfNeeded();
       }
     });
 
     this.loadOrders();
+  }
+
+  ngOnDestroy(): void {
+    this.stopTrackTimer();
+    this.destroyTrackCurierMap();
   }
 
   // === TAB SYSTEM METHODS ===
@@ -2818,14 +3531,74 @@ export class OrdersListComponent implements OnInit {
     }
   }
 
-  private splitOrdersByType(): void {
-    this.activeOrders = this.allOrders.filter(o => this.ACTIVE_STATUSES.includes(o.status));
-    this.pastOrders = this.allOrders.filter(o => this.PAST_STATUSES.includes(o.status));
+  private splitOrdersByType(autoSwitchEmptyActive = true): void {
+    const filterCopy: OrderFilter = {
+      ...this.orderFilter,
+      status: null,
+      pageSize: 999999,
+      pageNumber: 1
+    };
+    const filtered = this.orderService.filterOrders(this.allOrders, filterCopy, this.orderPayments).items;
 
-    // Auto-switch to 'past' tab if no active orders but has past orders
-    if (this.activeOrders.length === 0 && this.pastOrders.length > 0) {
+    this.activeOrders = filtered.filter(o => this.ACTIVE_STATUSES.includes(parseOrderStatus(o.status)));
+    this.pastOrders = filtered.filter(o => this.PAST_STATUSES.includes(parseOrderStatus(o.status)));
+
+    // Auto-switch to 'past' tab on initial load if no active orders but has past orders
+    if (autoSwitchEmptyActive && !this.highlightedOrderId && this.activeOrders.length === 0 && this.pastOrders.length > 0) {
       this.activeTab = 'past';
     }
+  }
+
+  private focusTargetOrderIfNeeded(): void {
+    const targetId = this.highlightedOrderId;
+    if (!targetId || this.allOrders.length === 0) return;
+
+    const targetOrder = this.allOrders.find(o => o.id === targetId);
+    if (!targetOrder) return;
+
+    if (this.viewMode === 'my') {
+      const st = parseOrderStatus(targetOrder.status);
+      if (this.PAST_STATUSES.includes(st)) {
+        this.activeTab = 'past';
+        this.pastFilterStatus = 'all';
+        this.expandedOrderIds.add(targetId);
+        const idx = this.filteredPastOrders.findIndex(o => o.id === targetId);
+        if (idx >= 0 && idx >= this.displayedPastCount) {
+          this.displayedPastCount = idx + this.ORDERS_PAGE_SIZE;
+        }
+      } else {
+        this.activeTab = 'active';
+        const idx = this.activeOrders.findIndex(o => o.id === targetId);
+        if (idx >= 0 && idx >= this.displayedActiveCount) {
+          this.displayedActiveCount = idx + this.ORDERS_PAGE_SIZE;
+        }
+      }
+    } else {
+      let idx = this.filteredOrders.findIndex(o => o.id === targetId);
+      if (idx === -1) {
+        // Clear blocking filters so deep-linked order is visible
+        this.orderFilter = {
+          ...this.orderFilter,
+          status: null,
+          search: null,
+          curierProfileId: null,
+          dateFrom: null,
+          dateTo: null,
+          paymentStatus: 'all'
+        };
+        this.applyFilters(false);
+        idx = this.filteredOrders.findIndex(o => o.id === targetId);
+      }
+      if (idx >= 0 && idx >= this.displayedCount) {
+        this.displayedCount = idx + (this.orderFilter.pageSize || 5);
+        this.paginatedOrders = this.filteredOrders.slice(0, this.displayedCount);
+      }
+    }
+
+    setTimeout(() => {
+      const el = document.getElementById(`order-card-${targetId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
   }
 
   private syncTabToUrl(): void {
@@ -2852,27 +3625,25 @@ export class OrdersListComponent implements OnInit {
       this.orderFilter.status = null;
     }
 
-    if (params['search']) {
-      this.orderFilter.search = params['search'];
+    if (params['orderId'] !== undefined && params['orderId'] !== null && params['orderId'] !== '') {
+      const parsedId = Number(params['orderId']);
+      this.highlightedOrderId = !isNaN(parsedId) && parsedId > 0 ? parsedId : null;
+    } else {
+      this.highlightedOrderId = null;
     }
+
+    this.orderFilter.search = params['search'] || null;
     if (params['branchId']) {
       this.orderFilter.branchId = Number(params['branchId']);
+    } else if (!this.authState.isBranchManager()) {
+      this.orderFilter.branchId = null;
     }
-    if (params['companyId']) {
-      this.orderFilter.companyId = Number(params['companyId']);
-    }
-    if (params['dateFrom']) {
-      this.orderFilter.dateFrom = params['dateFrom'];
-    }
-    if (params['dateTo']) {
-      this.orderFilter.dateTo = params['dateTo'];
-    }
-    if (params['paymentStatus']) {
-      this.orderFilter.paymentStatus = params['paymentStatus'];
-    }
-    if (params['sortBy']) {
-      this.orderFilter.sortBy = params['sortBy'];
-    }
+    this.orderFilter.companyId = params['companyId'] ? Number(params['companyId']) : null;
+    this.orderFilter.curierProfileId = params['curierProfileId'] ? Number(params['curierProfileId']) : null;
+    this.orderFilter.dateFrom = params['dateFrom'] || null;
+    this.orderFilter.dateTo = params['dateTo'] || null;
+    this.orderFilter.paymentStatus = params['paymentStatus'] || 'all';
+    this.orderFilter.sortBy = params['sortBy'] || 'createdAt_desc';
     if (params['pageSize']) {
       this.orderFilter.pageSize = Number(params['pageSize']) || 5;
     }
@@ -2885,17 +3656,23 @@ export class OrdersListComponent implements OnInit {
   private syncUrlWithFilters(): void {
     const queryParams: any = {};
 
+    if (this.viewMode === 'my') {
+      queryParams['tab'] = this.activeTab;
+    }
     if (this.orderFilter.status !== null && this.orderFilter.status !== undefined) {
       queryParams['status'] = this.orderFilter.status;
     }
     if (this.orderFilter.search) {
       queryParams['search'] = this.orderFilter.search;
     }
-    if (this.orderFilter.branchId) {
+    if (this.orderFilter.branchId && !this.authState.isBranchManager()) {
       queryParams['branchId'] = this.orderFilter.branchId;
     }
     if (this.orderFilter.companyId) {
       queryParams['companyId'] = this.orderFilter.companyId;
+    }
+    if (this.orderFilter.curierProfileId) {
+      queryParams['curierProfileId'] = this.orderFilter.curierProfileId;
     }
     if (this.orderFilter.dateFrom) {
       queryParams['dateFrom'] = this.orderFilter.dateFrom;
@@ -2938,6 +3715,27 @@ export class OrdersListComponent implements OnInit {
     }
   }
 
+  loadFilterCuriers(): void {
+    if (!this.authState.isAdminRole() && !this.authState.isAdminMode()) return;
+    this.curierService.getAll({ pageNumber: 1, pageSize: 100 }).subscribe({
+      next: (res) => {
+        this.mergeFilterCuriers((res?.items || []).map(c => ({ id: c.id, name: c.name })));
+      },
+      error: () => {}
+    });
+  }
+
+  private mergeFilterCuriers(items: { id: number; name: string }[]): void {
+    const map = new Map<number, { id: number; name: string }>();
+    this.filterCuriers.forEach(c => map.set(c.id, c));
+    items.forEach(c => {
+      if (c.id && !map.has(c.id)) {
+        map.set(c.id, c);
+      }
+    });
+    this.filterCuriers = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   loadCustomers(): void {
     if (this.authState.isSuperAdmin() || this.authState.isCompanyAdmin()) {
       this.customerService.getAll().subscribe({
@@ -2974,16 +3772,20 @@ export class OrdersListComponent implements OnInit {
     const missingIds = new Set<number>();
     this.allOrders.forEach(o => {
       const cId = o.customerId || (o as any).userId;
-      if (cId && !this.customersMap.has(cId)) {
+      if (cId && !this.customersMap.has(cId) && !this.inFlightCustomerIds.has(cId)) {
         missingIds.add(cId);
       }
     });
     missingIds.forEach(id => {
+      this.inFlightCustomerIds.add(id);
       this.customerService.getById(id).subscribe({
         next: (c) => {
+          this.inFlightCustomerIds.delete(id);
           if (c) this.customersMap.set(c.id, c);
         },
-        error: () => {}
+        error: () => {
+          this.inFlightCustomerIds.delete(id);
+        }
       });
     });
   }
@@ -3041,8 +3843,8 @@ export class OrdersListComponent implements OnInit {
         this.pastOrders = [];
         return;
       }
-      // Load all orders at once (PageSize=50) for client-side tab splitting
-      this.orderService.getMyOrdersPaged(1, 50).subscribe({
+      // Load all orders at once (PageSize=100) for client-side tab splitting
+      this.orderService.getMyOrdersPaged(1, 100).subscribe({
         next: (pagedResult) => {
           this.allOrders = pagedResult.items || [];
           this.orders = this.allOrders;
@@ -3056,12 +3858,13 @@ export class OrdersListComponent implements OnInit {
           this.hasNextPage = false;
 
           // Split orders into active/past for the new tab system
-          this.splitOrdersByType();
+          this.splitOrdersByType(true);
 
           this.isLoading = false;
           this.statusCounts = this.orderService.computeStatusCounts(this.allOrders);
           this.computeCustomerAvailableBranches();
           this.loadPaymentsForOrders();
+          this.focusTargetOrderIfNeeded();
         },
         error: (err) => {
           console.error('[Orders] Error loading my orders:', err);
@@ -3077,7 +3880,7 @@ export class OrdersListComponent implements OnInit {
           this.totalPages = 0;
           this.hasPreviousPage = false;
           this.hasNextPage = false;
-          this.statusCounts = { all: 0, pending: 0, confirmed: 0, shipped: 0, delivered: 0, cancelled: 0 };
+          this.statusCounts = { all: 0, pending: 0, confirmed: 0, assigned: 0, shipped: 0, delivered: 0, cancelled: 0, failed: 0 };
           if (err?.status === 403) {
             this.errorMessage = 'Buyurtmalarni ko\'rish uchun ruxsat yo\'q.';
           } else {
@@ -3098,6 +3901,7 @@ export class OrdersListComponent implements OnInit {
             this.enrichBranchOrdersCustomers();
             this.applyFilters(false);
             this.loadPaymentsForOrders();
+            this.focusTargetOrderIfNeeded();
           },
           error: (err) => {
             console.error('[Orders] Error loading orders by branch:', err);
@@ -3125,6 +3929,7 @@ export class OrdersListComponent implements OnInit {
             this.enrichBranchOrdersCustomers();
             this.applyFilters(false);
             this.loadPaymentsForOrders();
+            this.focusTargetOrderIfNeeded();
           },
           error: (err) => {
             console.error('[Orders] Error loading all orders:', err);
@@ -3143,7 +3948,25 @@ export class OrdersListComponent implements OnInit {
 
   // --- Filtering & Pagination methods ---
   applyFilters(syncUrl = true): void {
+    if (syncUrl) {
+      this.highlightedOrderId = null;
+    }
+
+    if (this.viewMode === 'my') {
+      this.splitOrdersByType(false);
+      if (syncUrl) {
+        this.syncUrlWithFilters();
+      }
+      return;
+    }
+
     // If companyId filter is selected by SuperAdmin, filter by branches of that company
+    this.mergeFilterCuriers(
+      this.allOrders
+        .filter(o => o.curierProfileId && o.curier)
+        .map(o => ({ id: o.curierProfileId!, name: o.curier!.name }))
+    );
+
     let targetOrders = [...this.allOrders];
     if (this.orderFilter.companyId && this.authState.isSuperAdmin()) {
       const companyBranchIds = new Set(
@@ -3187,6 +4010,7 @@ export class OrdersListComponent implements OnInit {
       search: null,
       branchId: this.authState.isBranchManager() ? this.authState.userBranchId() : null,
       companyId: null,
+      curierProfileId: null,
       dateFrom: null,
       dateTo: null,
       paymentStatus: 'all',
@@ -3248,6 +4072,12 @@ export class OrdersListComponent implements OnInit {
   loadPaymentsForOrders(): void {
     if (!this.orders || this.orders.length === 0) return;
 
+    this.orders.forEach(o => {
+      if (o.payment) {
+        this.orderPayments.set(o.id, this.paymentService.normalizePayment(o.payment));
+      }
+    });
+
     if (this.authState.isAdminRole() && this.viewMode === 'all') {
       const branchId = this.orderFilter.branchId || undefined;
       this.paymentService.getAllPayments(undefined, branchId).subscribe({
@@ -3255,21 +4085,25 @@ export class OrdersListComponent implements OnInit {
           (payments || []).forEach(p => {
             this.orderPayments.set(p.orderId, p);
           });
+          if (this.orderFilter.paymentStatus && this.orderFilter.paymentStatus !== 'all') {
+            this.applyFilters(false);
+          }
         },
         error: (err) => {
           console.error('[Orders] Error loading payments:', err);
         }
       });
     } else {
-      this.orders.forEach(order => {
-        this.paymentService.getPaymentByOrderId(order.id).subscribe({
-          next: (payment) => {
-            if (payment) {
-              this.orderPayments.set(order.id, payment);
-            }
-          },
-          error: () => {}
-        });
+      this.paymentService.getPaymentsByUserId(1, 100).subscribe({
+        next: (paged) => {
+          (paged?.items || []).forEach(p => {
+            this.orderPayments.set(p.orderId, p);
+          });
+          if (this.orderFilter.paymentStatus && this.orderFilter.paymentStatus !== 'all') {
+            this.splitOrdersByType(false);
+          }
+        },
+        error: () => {}
       });
     }
   }
@@ -3307,18 +4141,11 @@ export class OrdersListComponent implements OnInit {
     if (payment) {
       return this.getPaymentBadge(payment.status);
     }
-    // Agar to'lov jadvalida yozuv bo'lmasa, lekin buyurtma tasdiqlangan, jo'natilgan yoki yetkazilgan bo'lsa - demak to'lov qilingan!
-    if (
-      order.status === OrderStatus.Confirmed ||
-      order.status === OrderStatus.Shipped ||
-      order.status === OrderStatus.Delivered
-    ) {
-      return { label: 'To‘langan', color: '#15803d', bg: '#dcfce7' };
+    const status = parseOrderStatus(order.status);
+    if (status === OrderStatus.Cancelled || status === OrderStatus.DeliveryFailed) {
+      return { label: 'Bekor qilingan', color: '#4b5563', bg: '#e5e7eb' };
     }
-    if (order.status === OrderStatus.Cancelled) {
-      return { label: 'Bekor qilingan', color: '#6b7280', bg: '#e5e7eb' };
-    }
-    return { label: 'To‘lov kutilmoqda', color: '#b45309', bg: '#fef3c7' };
+    return { label: 'To‘lov qilinmagan', color: '#b45309', bg: '#fef3c7' };
   }
 
   canCustomerPay(order: Order): boolean {
@@ -3326,16 +4153,20 @@ export class OrdersListComponent implements OnInit {
     if (this.authState.isAdminRole() || this.authState.isAdminMode() || this.viewMode === 'all') {
       return false;
     }
-    // Jo'natildi (Shipped), Yetkazildi (Delivered), Bekor qilindi (Cancelled) yoki Tasdiqlangan (Confirmed) holatida to'lov qilish tugmasi ko'rinmaydi
+    // Jo'natildi (Shipped), Yetkazildi (Delivered), Bekor qilindi (Cancelled), DeliveryFailed yoki Tasdiqlangan (Confirmed) holatida to'lov qilish tugmasi ko'rinmaydi
     if (
       order.status === OrderStatus.Shipped ||
       order.status === OrderStatus.Delivered ||
       order.status === OrderStatus.Cancelled ||
+      order.status === OrderStatus.DeliveryFailed ||
       order.status === OrderStatus.Confirmed
     ) {
       return false;
     }
     const payment = this.getPayment(order.id);
+    if (payment?.paymentMethod === 'Cash' && payment.status === PaymentStatus.Pending) {
+      return false;
+    }
     return !payment || payment.status === PaymentStatus.Failed || payment.status === PaymentStatus.Pending;
   }
 
@@ -3343,6 +4174,9 @@ export class OrdersListComponent implements OnInit {
     const isAdmin = this.authState.isAdminRole() || this.authState.isAdminMode() || this.viewMode === 'all';
     if (!isAdmin) return false;
     if (order.status === OrderStatus.Cancelled) return false;
+    const payment = this.getPayment(order.id);
+    // Naqd (Cash) to'lovlarni kuryer yig'adi, admin chek tasdiqlash/rad etish tugmalari yashiriladi
+    if (payment && payment.paymentMethod === 'Cash') return false;
     return true;
   }
 
@@ -3452,6 +4286,7 @@ export class OrdersListComponent implements OnInit {
   // --- Customer Pay Modal Actions ---
   openPayModal(order: Order): void {
     this.currentOrderForPay = order;
+    this.customerPaymentMethod = 'CardTransfer';
     const existingPayment = this.getPayment(order.id);
     this.currentOrderExistingChekUrl = existingPayment?.chekUrl || null;
     this.selectedFilePreview = existingPayment?.chekUrl 
@@ -3465,8 +4300,10 @@ export class OrdersListComponent implements OnInit {
   closePayModal(): void {
     this.showPayModal = false;
     this.currentOrderForPay = null;
+    this.customerPaymentMethod = 'CardTransfer';
     this.selectedReceiptFile = null;
     this.selectedFilePreview = null;
+    this.currentOrderExistingChekUrl = null;
     this.payTransactionNote = '';
     this.isSubmittingPay = false;
   }
@@ -3516,44 +4353,50 @@ export class OrdersListComponent implements OnInit {
 
     this.isSubmittingPay = true;
     const order = this.currentOrderForPay;
-    const userId = this.authState.currentCustomerId() || 0;
+
+    if (this.customerPaymentMethod === 'Cash') {
+      this.executeCreatePayment(order, undefined);
+      return;
+    }
 
     if (this.selectedReceiptFile) {
       this.paymentService.uploadReceipt(this.selectedReceiptFile).subscribe({
         next: (chekUrl) => {
-          this.executeCreatePayment(order, userId, chekUrl);
+          this.executeCreatePayment(order, chekUrl);
         },
         error: (err) => {
           this.isSubmittingPay = false;
-          this.notification.error(err?.error?.message || 'Chek rasmini yuklashda xatolik yuz berdi.');
+          this.notification.error(err?.error?.message || err?.message || 'Chek rasmini yuklashda xatolik yuz berdi.');
         }
       });
     } else if (this.currentOrderExistingChekUrl) {
-      this.executeCreatePayment(order, userId, this.currentOrderExistingChekUrl);
+      this.executeCreatePayment(order, this.currentOrderExistingChekUrl);
     } else {
       this.isSubmittingPay = false;
       this.notification.error('Iltimos, to‘lov cheki rasmini yuklang!');
     }
   }
 
-  private executeCreatePayment(order: Order, userId: number, chekUrl: string): void {
+  private executeCreatePayment(order: Order, chekUrl?: string): void {
     this.paymentService.createPayment({
       orderId: order.id,
-      userId: userId,
-      amount: order.totalPrice,
-      chekUrl: chekUrl,
-      transactionNote: this.payTransactionNote,
-      paymentMethod: 'CardTransfer'
+      paymentMethod: this.customerPaymentMethod,
+      ...(chekUrl ? { chekUrl } : {}),
+      ...(this.payTransactionNote?.trim() ? { transactionNote: this.payTransactionNote.trim() } : {})
     }).subscribe({
       next: (payment) => {
         this.isSubmittingPay = false;
         this.orderPayments.set(order.id, payment);
-        this.notification.success('To‘lov cheki muvaffaqiyatli yuborildi! Admin tasdiqlashi kutilmoqda.');
+        this.notification.success(
+          this.customerPaymentMethod === 'Cash'
+            ? 'Naqd to‘lov tanlandi! Buyurtma yetkazilganda pulni kuryerga topshirasiz.'
+            : 'To‘lov cheki muvaffaqiyatli yuborildi! Admin tasdiqlashi kutilmoqda.'
+        );
         this.closePayModal();
       },
       error: (err) => {
         this.isSubmittingPay = false;
-        this.notification.error(err?.error?.message || 'To‘lovni yuborishda xatolik yuz berdi.');
+        this.notification.error(err?.error?.message || err?.message || 'To‘lovni yuborishda xatolik yuz berdi.');
       }
     });
   }
@@ -3638,7 +4481,7 @@ export class OrdersListComponent implements OnInit {
       },
       error: (err) => {
         this.isAdminProcessingPayment = false;
-        this.notification.error(err?.error?.message || 'To‘lovni tasdiqlashda xatolik yuz berdi.');
+        this.notification.error(err?.error?.message || err?.message || 'To‘lovni tasdiqlashda xatolik yuz berdi.');
       }
     });
   }
@@ -3674,7 +4517,7 @@ export class OrdersListComponent implements OnInit {
       },
       error: (err) => {
         this.isAdminProcessingPayment = false;
-        this.notification.error(err?.error?.message || 'To‘lovni rad etishda xatolik yuz berdi.');
+        this.notification.error(err?.error?.message || err?.message || 'To‘lovni rad etishda xatolik yuz berdi.');
       }
     });
   }
@@ -3687,8 +4530,6 @@ export class OrdersListComponent implements OnInit {
 
     this.paymentService.createPayment({
       orderId: order.id,
-      userId: order.customerId,
-      amount: order.totalPrice,
       paymentMethod: this.adminPaymentMethod,
       transactionNote: this.adminPaymentNote || (this.adminPaymentMethod === 'Cash' ? 'Filialda naqd pul to‘landi' : 'Filialda terminal orqali to‘landi')
     }).subscribe({
@@ -3703,13 +4544,13 @@ export class OrdersListComponent implements OnInit {
           },
           error: (err) => {
             this.isAdminProcessingPayment = false;
-            this.notification.error(err?.error?.message || 'To‘lovni tasdiqlashda xatolik yuz berdi.');
+            this.notification.error(err?.error?.message || err?.message || 'To‘lovni tasdiqlashda xatolik yuz berdi.');
           }
         });
       },
       error: (err) => {
         this.isAdminProcessingPayment = false;
-        this.notification.error(err?.error?.message || 'To‘lov yaratishda xatolik yuz berdi.');
+        this.notification.error(err?.error?.message || err?.message || 'To‘lov yaratishda xatolik yuz berdi.');
       }
     });
   }
@@ -3727,8 +4568,443 @@ export class OrdersListComponent implements OnInit {
     this.viewingReceiptUrl = '';
   }
 
+  isPdfUrl(url?: string | null): boolean {
+    if (!url) return false;
+    return /\.pdf(\?.*)?$/i.test(url.trim());
+  }
+
   canCancel(status: OrderStatus | number): boolean {
-    return status === OrderStatus.Pending || status === OrderStatus.Confirmed;
+    return status === OrderStatus.Pending || status === OrderStatus.Confirmed || status === OrderStatus.AssignedToCourier;
+  }
+
+  canAssignCurier(order: Order): boolean {
+    const isAdmin = this.authState.isAdminRole() || this.authState.isAdminMode();
+    if (!isAdmin || order.curierProfileId) return false;
+    return order.status === OrderStatus.Pending || order.status === OrderStatus.Confirmed;
+  }
+
+  canUnassignCurier(order: Order): boolean {
+    const isAdmin = this.authState.isAdminRole() || this.authState.isAdminMode();
+    if (!isAdmin || !order.curierProfileId) return false;
+    return order.status === OrderStatus.Pending || order.status === OrderStatus.Confirmed || order.status === OrderStatus.AssignedToCourier;
+  }
+
+  openAssignCurierModal(order: Order): void {
+    this.orderForAssignCurier = order;
+    this.selectedCurierId = 0;
+    this.showAssignCurierModal = true;
+    this.isLoadingCuriers = true;
+    this.curierService.getAll({ pageNumber: 1, pageSize: 100 }).subscribe({
+      next: (res) => {
+        this.availableCuriers = (res.items || []).filter(c => c.isActive && c.isOnline);
+        this.isLoadingCuriers = false;
+      },
+      error: () => {
+        this.availableCuriers = [];
+        this.isLoadingCuriers = false;
+      }
+    });
+  }
+
+  closeAssignCurierModal(): void {
+    this.showAssignCurierModal = false;
+    this.orderForAssignCurier = null;
+    this.selectedCurierId = 0;
+    this.isAssigningCurier = false;
+  }
+
+  confirmAssignCurier(): void {
+    if (!this.orderForAssignCurier || !this.selectedCurierId || this.isAssigningCurier) return;
+    this.isAssigningCurier = true;
+    this.orderService.assignCurier({
+      orderId: this.orderForAssignCurier.id,
+      curierProfileId: Number(this.selectedCurierId)
+    }).subscribe({
+      next: () => {
+        this.notification.success('Kuryer buyurtmaga biriktirildi');
+        this.closeAssignCurierModal();
+        this.loadOrders();
+      },
+      error: (err) => {
+        this.notification.error(err?.error?.message || err?.message || 'Kuryer biriktirishda xatolik');
+        this.isAssigningCurier = false;
+      }
+    });
+  }
+
+  unassignCurierFromOrder(order: Order): void {
+    this.orderService.unassignCurier(order.id).subscribe({
+      next: () => {
+        this.notification.info('Kuryer buyurtmadan olib tashlandi');
+        this.loadOrders();
+      },
+      error: (err) => {
+        this.notification.error(err?.error?.message || err?.message || 'Xatolik yuz berdi');
+      }
+    });
+  }
+
+  getCurierVehicleLabel(type: number): string {
+    return TransportTypeLabels[type] || 'Transport';
+  }
+
+  getCurierVehicleIcon(type: number): string {
+    return TransportTypeIcons[type] || '🛵';
+  }
+
+  onCurierAvatarError(curierId: number): void {
+    this.failedCurierAvatarIds.add(curierId);
+  }
+
+  openCurierInfoModal(order: Order): void {
+    if (!order?.curier) return;
+    this.curierInfoOrder = order;
+    this.showCurierInfoModal = true;
+  }
+
+  closeCurierInfoModal(): void {
+    this.showCurierInfoModal = false;
+    this.curierInfoOrder = null;
+  }
+
+  openTrackFromCurierModal(): void {
+    const order = this.curierInfoOrder;
+    this.closeCurierInfoModal();
+    if (order) {
+      this.openTrackCurierModal(order);
+    }
+  }
+
+  hasValidCurierPhoto(url?: string | null): boolean {
+    if (!url || !url.trim()) return false;
+    const lower = url.trim().toLowerCase();
+    return !(
+      lower.includes('share.google') ||
+      lower.includes('pinterest.com/pin/') ||
+      lower.includes('google.com/search') ||
+      lower.includes('google.com/url')
+    );
+  }
+
+  getCurierInitials(name?: string | null): string {
+    const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return (parts[0]?.slice(0, 2) || 'K').toUpperCase();
+  }
+
+  canTrackCurier(order: Order): boolean {
+    const isAdmin = this.authState.isAdminRole() || this.authState.isAdminMode();
+    if (!isAdmin || !order.curierProfileId) return false;
+    return !this.isOrderFinal(order.status) && order.status !== OrderStatus.DeliveryFailed;
+  }
+
+  hasDeliveryCoords(order?: Order | null): boolean {
+    return !!this.getOrderDeliveryCoords(order);
+  }
+
+  get hasAnyTrackMapPoint(): boolean {
+    if (!this.trackingOrder) return false;
+    return !!(
+      this.getCurierCoords(this.trackedCurier) ||
+      this.getOrderBranchCoords(this.trackingOrder) ||
+      this.getOrderDeliveryCoords(this.trackingOrder)
+    );
+  }
+
+  private isValidCoord(lat?: number | null, lng?: number | null): boolean {
+    if (lat == null || lng == null) return false;
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    return !isNaN(nLat) && !isNaN(nLng) && !(nLat === 0 && nLng === 0);
+  }
+
+  private getCurierCoords(c?: CurierResponseDto | null): MapLocation | null {
+    if (!c || !this.isValidCoord(c.latitude, c.longitude)) return null;
+    return { latitude: Number(c.latitude), longitude: Number(c.longitude) };
+  }
+
+  private getOrderBranchCoords(order?: Order | null): MapLocation | null {
+    if (!order?.companyBranchId) return null;
+    const branch = this.branches.find(b => b.id === order.companyBranchId);
+    if (!branch) return null;
+    let lat = branch.latitude != null ? Number(branch.latitude) : NaN;
+    let lng = branch.longitude != null ? Number(branch.longitude) : NaN;
+    if ((isNaN(lat) || isNaN(lng)) && branch.location) {
+      const match = branch.location.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+      if (match) {
+        lat = parseFloat(match[1]);
+        lng = parseFloat(match[2]);
+      }
+    }
+    return this.isValidCoord(lat, lng) ? { latitude: lat, longitude: lng, address: branch.address } : null;
+  }
+
+  private getOrderDeliveryCoords(order?: Order | null): MapLocation | null {
+    if (!order || !this.isValidCoord(order.deliveryLatitude, order.deliveryLongitude)) return null;
+    return {
+      latitude: Number(order.deliveryLatitude),
+      longitude: Number(order.deliveryLongitude),
+      address: order.deliveryAddress
+    };
+  }
+
+  private createTrackBadgeIcon(emoji: string, bg: string): L.DivIcon {
+    return L.divIcon({
+      html: `<div style="width:36px;height:36px;border-radius:50%;background:${bg};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;border:2.5px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.3);">${emoji}</div>`,
+      className: 'track-custom-pin',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -20]
+    });
+  }
+
+  getTrackGoogleMapsUrl(): string | null {
+    const curierLoc = this.getCurierCoords(this.trackedCurier);
+    const branchLoc = this.getOrderBranchCoords(this.trackingOrder);
+    const deliveryLoc = this.getOrderDeliveryCoords(this.trackingOrder);
+    const origin = curierLoc || branchLoc;
+    const dest = deliveryLoc || branchLoc;
+
+    if (origin && dest && (origin.latitude !== dest.latitude || origin.longitude !== dest.longitude)) {
+      return `https://www.google.com/maps/dir/?api=1&origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}`;
+    }
+    const single = curierLoc || deliveryLoc || branchLoc;
+    return single ? `https://www.google.com/maps?q=${single.latitude},${single.longitude}` : null;
+  }
+
+  openTrackCurierModal(order: Order): void {
+    this.stopTrackTimer();
+    this.destroyTrackCurierMap();
+    this.trackSessionId++;
+    this.trackingOrder = order;
+    this.trackedCurier = null;
+    this.trackEstimate = null;
+    this.trackLegLabel = '';
+    this.trackLastUpdated = null;
+    this.showTrackCurierModal = true;
+    if (this.hasAnyTrackMapPoint) {
+      setTimeout(() => this.renderOrUpdateTrackMap(), 50);
+    }
+    this.refreshTrackedCurier();
+    this.trackTimer = setInterval(() => this.refreshTrackedCurier(), 10000);
+  }
+
+  refreshTrackedCurier(): void {
+    const order = this.trackingOrder;
+    const curierId = order?.curierProfileId;
+    if (!curierId || !order) return;
+    const sessionId = this.trackSessionId;
+    this.isLoadingTrack = true;
+    this.curierService.getById(curierId).subscribe({
+      next: (c) => {
+        if (sessionId !== this.trackSessionId) return;
+        this.trackedCurier = c;
+        this.trackLastUpdated = new Date();
+        this.isLoadingTrack = false;
+        if (this.hasAnyTrackMapPoint) {
+          setTimeout(() => this.renderOrUpdateTrackMap(), 50);
+        }
+      },
+      error: () => {
+        if (sessionId !== this.trackSessionId) return;
+        this.isLoadingTrack = false;
+        if (this.hasAnyTrackMapPoint) {
+          setTimeout(() => this.renderOrUpdateTrackMap(), 50);
+        }
+      }
+    });
+  }
+
+  private renderOrUpdateTrackMap(): void {
+    const order = this.trackingOrder;
+    const el = document.getElementById('order-curier-track-map');
+    if (!el || !order) return;
+
+    const c = this.trackedCurier;
+    const curierLoc = this.getCurierCoords(c);
+    const branchLoc = this.getOrderBranchCoords(order);
+    const deliveryLoc = this.getOrderDeliveryCoords(order);
+
+    const allPoints: MapLocation[] = [branchLoc, curierLoc, deliveryLoc].filter((p): p is MapLocation => !!p);
+    if (allPoints.length === 0) return;
+
+    const first = curierLoc || deliveryLoc || branchLoc!;
+    if (!this.trackMap) {
+      this.trackMap = L.map(el).setView([first.latitude, first.longitude], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(this.trackMap);
+      this.trackMap.invalidateSize();
+    }
+
+    // 1. Filial markeri
+    if (branchLoc && !this.trackBranchMarker) {
+      const branch = this.branches.find(b => b.id === order.companyBranchId);
+      const bName = this.mapService.escapeHtml(branch?.name || 'Filial');
+      const bAddr = branch?.address ? `<br><small>${this.mapService.escapeHtml(branch.address)}</small>` : '';
+      this.trackBranchMarker = L.marker([branchLoc.latitude, branchLoc.longitude], {
+        icon: this.createTrackBadgeIcon('🏢', '#4f46e5')
+      })
+        .addTo(this.trackMap)
+        .bindPopup(`🏢 <strong>${bName}</strong>${bAddr}`);
+    }
+
+    // 2. Yetkazish manzili markeri
+    if (deliveryLoc && !this.trackDeliveryMarker) {
+      const dAddr = order.deliveryAddress ? `<br><small>${this.mapService.escapeHtml(order.deliveryAddress)}</small>` : '';
+      this.trackDeliveryMarker = L.marker([deliveryLoc.latitude, deliveryLoc.longitude], {
+        icon: this.createTrackBadgeIcon('🏠', '#ef4444')
+      })
+        .addTo(this.trackMap)
+        .bindPopup(`🏠 <strong>Yetkazish manzili</strong>${dAddr}`);
+    }
+
+    // 3. Kuryer markeri (jonli yangilanadi)
+    if (curierLoc && c) {
+      const curierBg = c.isOnline ? '#16a34a' : '#64748b';
+      const curierEmoji = this.getCurierVehicleIcon(c.vehicleType);
+      const safeCName = this.mapService.escapeHtml(c.name || 'Kuryer');
+      const safeCPhone = this.mapService.escapeHtml(c.phoneNumber || '');
+      const popupHtml = `${curierEmoji} <strong>${safeCName}</strong><br>${safeCPhone}<br><small>${c.isOnline ? '🟢 Online' : '⚫ Offline'}</small>`;
+      if (!this.trackCurierMarker) {
+        this.trackCurierMarker = L.marker([curierLoc.latitude, curierLoc.longitude], {
+          icon: this.createTrackBadgeIcon(curierEmoji, curierBg),
+          zIndexOffset: 500
+        })
+          .addTo(this.trackMap)
+          .bindPopup(popupHtml);
+      } else {
+        this.trackCurierMarker.setLatLng([curierLoc.latitude, curierLoc.longitude]);
+        this.trackCurierMarker.setIcon(this.createTrackBadgeIcon(curierEmoji, curierBg));
+        this.trackCurierMarker.setPopupContent(popupHtml);
+      }
+    }
+
+    if (!this.trackBoundsFitted && allPoints.length > 0) {
+      if (allPoints.length === 1) {
+        this.trackMap.setView([allPoints[0].latitude, allPoints[0].longitude], 15);
+      } else {
+        this.trackMap.fitBounds(
+          allPoints.map(p => [p.latitude, p.longitude] as [number, number]),
+          { padding: [45, 45], maxZoom: 16 }
+        );
+      }
+      this.trackBoundsFitted = true;
+    }
+
+    this.updateTrackRouteAndEta(order, c, curierLoc, branchLoc, deliveryLoc);
+  }
+
+  private async updateTrackRouteAndEta(
+    order: Order,
+    curier: CurierResponseDto | null,
+    curierLoc: MapLocation | null,
+    branchLoc: MapLocation | null,
+    deliveryLoc: MapLocation | null
+  ): Promise<void> {
+    let points: MapLocation[] = [];
+    let includePickupBuffer = false;
+    let legLabel = '';
+
+    if (curierLoc && deliveryLoc) {
+      if (order.status === OrderStatus.Shipped || !branchLoc) {
+        points = [curierLoc, deliveryLoc];
+        legLabel = 'Kuryer → Yetkazish manzili';
+      } else {
+        const toBranchKm = this.mapService.calculateDistance(curierLoc, branchLoc);
+        if (toBranchKm < 0.25) {
+          points = [branchLoc, deliveryLoc];
+          legLabel = 'Filial (olish +5 daq) → Yetkazish manzili';
+        } else {
+          points = [curierLoc, branchLoc, deliveryLoc];
+          legLabel = 'Kuryer → Filial → Yetkazish manzili';
+        }
+        includePickupBuffer = true;
+      }
+    } else if (branchLoc && deliveryLoc) {
+      points = [branchLoc, deliveryLoc];
+      includePickupBuffer = order.status !== OrderStatus.Shipped;
+      legLabel = 'Filial → Yetkazish manzili (kuryer GPS kutilmoqda)';
+    } else if (curierLoc && branchLoc) {
+      points = [curierLoc, branchLoc];
+      legLabel = 'Kuryer ↔ Filial';
+    } else {
+      this.trackEstimate = null;
+      this.trackLegLabel = '';
+      return;
+    }
+
+    this.trackLegLabel = legLabel;
+    const routeKey = `${order.id}:${order.status}:${points.length}:${curier?.vehicleType ?? 'x'}`;
+    const curierMoved =
+      !curierLoc ||
+      !this.lastRouteCurierLoc ||
+      this.mapService.calculateDistance(curierLoc, this.lastRouteCurierLoc) >= 0.05;
+
+    if (this.lastRouteKey === routeKey && !curierMoved && this.trackEstimate) {
+      return;
+    }
+
+    this.lastRouteKey = routeKey;
+    this.lastRouteCurierLoc = curierLoc ? { ...curierLoc } : null;
+    const sessionId = this.trackSessionId;
+
+    const estimate = await this.mapService.estimateRoute(points, curier?.vehicleType, includePickupBuffer);
+    if (sessionId !== this.trackSessionId || !this.showTrackCurierModal || !this.trackMap) {
+      return;
+    }
+
+    this.trackEstimate = estimate;
+    if (this.trackRouteLayer) {
+      this.trackRouteLayer.remove();
+      this.trackRouteLayer = undefined;
+    }
+    if (estimate.geometry.length >= 2) {
+      this.trackRouteLayer = L.polyline(estimate.geometry, {
+        color: '#4f46e5',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: estimate.isRoadRoute ? undefined : '8, 8'
+      }).addTo(this.trackMap);
+    }
+  }
+
+  private stopTrackTimer(): void {
+    if (this.trackTimer) {
+      clearInterval(this.trackTimer);
+      this.trackTimer = null;
+    }
+  }
+
+  private destroyTrackCurierMap(): void {
+    if (this.trackRouteLayer) {
+      this.trackRouteLayer.remove();
+      this.trackRouteLayer = undefined;
+    }
+    if (this.trackMap) {
+      this.trackMap.remove();
+      this.trackMap = undefined;
+    }
+    this.trackCurierMarker = undefined;
+    this.trackBranchMarker = undefined;
+    this.trackDeliveryMarker = undefined;
+    this.trackBoundsFitted = false;
+    this.lastRouteKey = '';
+    this.lastRouteCurierLoc = null;
+  }
+
+  closeTrackCurierModal(): void {
+    this.trackSessionId++;
+    this.stopTrackTimer();
+    this.destroyTrackCurierMap();
+    this.showTrackCurierModal = false;
+    this.trackingOrder = null;
+    this.trackedCurier = null;
+    this.trackEstimate = null;
+    this.trackLegLabel = '';
+    this.trackLastUpdated = null;
   }
 
   getBranchName(branchId: number): string {

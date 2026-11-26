@@ -2,9 +2,10 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Order, OrderStatus, OrderFilter, OrderStatusCounts, parseOrderStatus } from '../models/order.model';
+import { Order, CreateOrderDto, OrderStatus, OrderFilter, OrderStatusCounts, parseOrderStatus } from '../models/order.model';
 import { PagedResult, PagedQuery } from '../models/payment.model';
-import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
+import { ResponseModel, unwrapResult, unwrapOrThrow, isErrorResponse } from '../models/response.model';
+import { AssignCurierDto } from '../models/curier.model';
 
 @Injectable({
   providedIn: 'root'
@@ -13,8 +14,8 @@ export class OrderService {
   private http = inject(HttpClient);
   private apiUrl = `${environment.apiUrl}/Order`;
 
-  createOrder(): Observable<boolean> {
-    return this.http.post<ResponseModel<boolean> | boolean>(`${this.apiUrl}/Create`, null).pipe(
+  createOrder(dto?: CreateOrderDto): Observable<boolean> {
+    return this.http.post<ResponseModel<boolean> | boolean>(`${this.apiUrl}/Create`, dto || {}).pipe(
       map(res => {
         if (res && typeof res === 'object') {
           const resp = res as any;
@@ -148,7 +149,7 @@ export class OrderService {
       `${this.apiUrl}/UpdateStatus?orderId=${orderId}&status=${status}`,
       null
     ).pipe(
-      map(res => unwrapResult(res) === true)
+      map(res => unwrapOrThrow(res, 'Statusni yangilashda xatolik') === true)
     );
   }
 
@@ -157,7 +158,7 @@ export class OrderService {
       `${this.apiUrl}/Cancel?orderId=${orderId}`,
       null
     ).pipe(
-      map(res => unwrapResult(res) === true)
+      map(res => unwrapOrThrow(res, 'Buyurtmani bekor qilishda xatolik') === true)
     );
   }
 
@@ -221,18 +222,23 @@ export class OrderService {
       all: orders.length,
       pending: 0,
       confirmed: 0,
+      assigned: 0,
       shipped: 0,
       delivered: 0,
-      cancelled: 0
+      cancelled: 0,
+      failed: 0
     };
 
     orders.forEach(o => {
-      switch (o.status) {
+      switch (parseOrderStatus(o.status)) {
         case OrderStatus.Pending:
           counts.pending++;
           break;
         case OrderStatus.Confirmed:
           counts.confirmed++;
+          break;
+        case OrderStatus.AssignedToCourier:
+          counts.assigned++;
           break;
         case OrderStatus.Shipped:
           counts.shipped++;
@@ -242,6 +248,9 @@ export class OrderService {
           break;
         case OrderStatus.Cancelled:
           counts.cancelled++;
+          break;
+        case OrderStatus.DeliveryFailed:
+          counts.failed++;
           break;
       }
     });
@@ -259,12 +268,18 @@ export class OrderService {
     // 1. Status chip filter
     if (filter.status !== null && filter.status !== undefined && (filter.status as any) !== '') {
       const stNum = Number(filter.status);
-      result = result.filter(o => o.status === stNum);
+      result = result.filter(o => parseOrderStatus(o.status) === stNum);
     }
 
     // 2. Branch filter
     if (filter.branchId !== null && filter.branchId !== undefined) {
       result = result.filter(o => o.companyBranchId === Number(filter.branchId));
+    }
+
+    // 2.1 Curier filter
+    if (filter.curierProfileId !== null && filter.curierProfileId !== undefined) {
+      const cId = Number(filter.curierProfileId);
+      result = result.filter(o => Number(o.curierProfileId) === cId);
     }
 
     // 3. Date From filter
@@ -298,17 +313,18 @@ export class OrderService {
     if (filter.paymentStatus && filter.paymentStatus !== 'all' && orderPayments) {
       result = result.filter(o => {
         const pay = orderPayments.get(o.id);
-        const isCompleted = (pay && pay.status === 1) || o.status === OrderStatus.Shipped || o.status === OrderStatus.Confirmed || o.status === OrderStatus.Delivered;
-        
+        const payStatus = pay ? Number(pay.status) : null;
+        const isCompleted = payStatus === 1;
+
         switch (filter.paymentStatus) {
           case 'unpaid':
-            return !pay && o.status !== OrderStatus.Shipped && o.status !== OrderStatus.Confirmed && o.status !== OrderStatus.Delivered;
+            return !pay;
           case 'pending':
-            return pay && pay.status === 0;
+            return payStatus === 0;
           case 'completed':
             return isCompleted;
           case 'failed':
-            return pay && pay.status === 2;
+            return payStatus === 2;
           default:
             return true;
         }
@@ -348,6 +364,72 @@ export class OrderService {
       hasPreviousPage: pageNumber > 1,
       hasNextPage: pageNumber < totalPages
     };
+  }
+
+  // ==================== CURIER METHODS ====================
+
+  assignCurier(dto: AssignCurierDto): Observable<boolean> {
+    return this.http.post<ResponseModel<boolean>>(`${this.apiUrl}/assign-curier`, dto).pipe(
+      map(res => {
+        if (isErrorResponse(res)) {
+          throw new Error((res as any)?.message || 'Kuryer biriktirishda xatolik');
+        }
+        return unwrapResult(res) === true;
+      })
+    );
+  }
+
+  unassignCurier(orderId: number): Observable<boolean> {
+    return this.http.put<ResponseModel<boolean>>(`${this.apiUrl}/${orderId}/unassign-curier`, null).pipe(
+      map(res => {
+        if (isErrorResponse(res)) {
+          throw new Error((res as any)?.message || 'Kuryerni olib tashlashda xatolik');
+        }
+        return unwrapResult(res) === true;
+      })
+    );
+  }
+
+  getMyDeliveries(query: PagedQuery = {}): Observable<PagedResult<Order>> {
+    let params = this.appendPagedParams(new HttpParams(), query);
+    return this.http.get<ResponseModel<PagedResult<Order>>>(`${this.apiUrl}/my-deliveries`, { params }).pipe(
+      map(res => {
+        if (isErrorResponse(res)) {
+          throw new Error((res as any)?.message || 'Yetkazmalarni yuklashda xatolik');
+        }
+        const data = unwrapResult(res);
+        if (data && data.items) {
+          return { ...data, items: this.normalizeOrders(data.items) };
+        }
+        return this.emptyPagedResult(query);
+      })
+    );
+  }
+
+  updateCurierStatus(orderId: number, status: OrderStatus): Observable<boolean> {
+    return this.http.put<ResponseModel<boolean>>(
+      `${this.apiUrl}/${orderId}/curier-status`,
+      null,
+      { params: new HttpParams().set('status', status.toString()) }
+    ).pipe(
+      map(res => {
+        if (isErrorResponse(res)) {
+          throw new Error((res as any)?.message || 'Buyurtma holatini yangilashda xatolik');
+        }
+        return unwrapResult(res) === true;
+      })
+    );
+  }
+
+  rejectAssignment(orderId: number): Observable<boolean> {
+    return this.http.put<ResponseModel<boolean>>(`${this.apiUrl}/${orderId}/reject-assignment`, null).pipe(
+      map(res => {
+        if (isErrorResponse(res)) {
+          throw new Error((res as any)?.message || 'Buyurtmani rad etishda xatolik');
+        }
+        return unwrapResult(res) === true;
+      })
+    );
   }
 }
 

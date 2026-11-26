@@ -1,0 +1,76 @@
+<div class="curier-apply-container">
+  @if (submitted()) {
+    <div class="success-card">
+      <div class="success-icon">✅</div>
+      <h2>Ariza yuborildi!</h2>
+      <p>Arizangiz ko'rib chiqilmoqda. Tasdiqlangandan so'ng sizga xabar beriladi.</p>
+      <p class="note">Tasdiqlangandan keyin qayta login qilishingiz kerak bo'ladi.</p>
+      <button class="btn-primary" (click)="goHome()">Bosh sahifaga</button>
+    </div>
+  } @else {
+    <div class="apply-card">
+      <h2>Kuryer bo'lish</h2>
+      <p class="subtitle">Yetkazib berish xizmatiga qo'shiling</p>
+
+      <form (ngSubmit)="submit()">
+        <div class="form-group">
+          <label>Transport turi *</label>
+          <div class="transport-options">
+            @for (t of transportTypes; track t.value) {
+              <label class="transport-option" [class.selected]="vehicleType === t.value">
+                <input type="radio" name="vehicleType" [value]="t.value" [ngModel]="vehicleType" (ngModelChange)="onVehicleTypeChange($event)">
+                <span class="icon">{{ t.icon }}</span>
+                <span class="label">{{ t.label }}</span>
+              </label>
+            }
+          </div>
+        </div>
+
+        @if (requiresLicense) {
+          <div class="form-group">
+            <label>Guvohnoma raqami *</label>
+            <input type="text" [(ngModel)]="license" name="license" placeholder="AA1234567" required>
+            <small>Avtomobil yoki mototsikl uchun haydovchilik guvohnomasi shart</small>
+          </div>
+        }
+
+        <div class="form-group">
+          <label>Profil rasmi (ixtiyoriy)</label>
+          <div class="photo-upload-box" (click)="photoInput.click()">
+            <input
+              #photoInput
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+              (change)="onPhotoSelected($event)"
+              style="display: none;"
+            />
+            @if (photoPreviewUrl(); as preview) {
+              <div class="photo-preview-row">
+                <img [src]="preview" alt="Profil rasmi" class="photo-preview-img" />
+                <div class="photo-preview-meta">
+                  <strong>{{ selectedPhotoFile?.name }}</strong>
+                  @if (selectedPhotoFile) {
+                    <small>{{ (selectedPhotoFile.size / 1024).toFixed(0) }} KB · O'zgartirish uchun bosing</small>
+                  }
+                </div>
+                <button type="button" class="remove-photo-btn" (click)="removePhoto($event)">✕</button>
+              </div>
+            } @else {
+              <div class="photo-placeholder">
+                <span>📷 Rasm yuklash uchun bosing</span>
+                <small>JPG, PNG yoki WEBP (maksimum 3 MB)</small>
+              </div>
+            }
+          </div>
+          @if (photoError(); as pErr) {
+            <small class="photo-error-text">{{ pErr }}</small>
+          }
+        </div>
+
+        <button type="submit" class="btn-primary" [disabled]="loading()">
+          {{ loading() ? 'Yuborilmoqda...' : 'Ariza yuborish' }}
+        </button>
+      </form>
+    </div>
+  }
+</div>

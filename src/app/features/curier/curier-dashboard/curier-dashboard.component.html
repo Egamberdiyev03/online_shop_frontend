@@ -1,0 +1,74 @@
+<div class="curier-dashboard">
+  @if (loading()) {
+    <div class="loading">Yuklanmoqda...</div>
+  } @else {
+    @if (profile(); as p) {
+    <!-- Online Toggle -->
+    <div class="online-section">
+      <div class="online-toggle" [class.online]="p.isOnline">
+        <button (click)="toggleOnline()" [disabled]="togglingOnline()">
+          <span class="status-dot"></span>
+          <span>{{ p.isOnline ? 'Online' : 'Offline' }}</span>
+        </button>
+      </div>
+      @if (!p.isActive) {
+        <div class="inactive-warning">
+          Akkauntingiz hali faollashtirilmagan
+        </div>
+      }
+    </div>
+
+    <!-- Profile Card -->
+    <div class="profile-card">
+      <div class="avatar">
+        @if (p.profilePictureUrl && !avatarBroken()) {
+          <img [src]="p.profilePictureUrl | imageUrl" alt="Profil" (error)="avatarBroken.set(true)">
+        } @else {
+          <span>{{ getInitials(p.name) }}</span>
+        }
+      </div>
+      <div class="info">
+        <h2>{{ p.name }}</h2>
+        <p class="transport">{{ getTransportLabel(p.vehicleType) }}</p>
+        <p class="phone">{{ p.phoneNumber }}</p>
+      </div>
+    </div>
+
+    <!-- Cash Summary -->
+    @if (cashSummary(); as cs) {
+      <div class="cash-card" [class.has-debt]="cs.debt > 0">
+        <h3>Naqd pul hisobi</h3>
+        <div class="amounts">
+          <div class="amount">
+            <span class="label">Yig'ilgan</span>
+            <span class="value success">{{ formatMoney(cs.collected) }}</span>
+          </div>
+          <div class="amount">
+            <span class="label">Topshirilgan</span>
+            <span class="value">{{ formatMoney(cs.handedOver) }}</span>
+          </div>
+          <div class="amount">
+            <span class="label">Qarz</span>
+            <span class="value" [class.debt]="cs.debt > 0">{{ formatMoney(cs.debt) }}</span>
+          </div>
+        </div>
+        @if (cs.debt > 0) {
+          <p class="debt-warning">Smena oxirida filialga topshiring</p>
+        }
+      </div>
+    }
+
+    <!-- Quick Links -->
+    <div class="quick-links">
+      <a routerLink="/curier/deliveries" class="link-card">
+        <span class="icon">📦</span>
+        <span>Mening yetkazmalarim</span>
+      </a>
+      <button type="button" class="link-card" (click)="testSound()" style="cursor: pointer; width: 100%; text-align: left;">
+        <span class="icon">🔔</span>
+        <span>Buyurtma ovozini yoqish / tekshirish</span>
+      </button>
+    </div>
+    }
+  }
+</div>

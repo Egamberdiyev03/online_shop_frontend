@@ -11,12 +11,15 @@ import { Product } from '../../../core/models/product.model';
 import { Customer } from '../../../core/models/customer.model';
 import { Category } from '../../../core/models/category.model';
 import { Order, OrderStatus } from '../../../core/models/order.model';
+import { Comment } from '../../../core/models/comment.model';
 import { CategoryService } from '../../../core/services/category.service';
 import { OrderService } from '../../../core/services/order.service';
+import { CommentService } from '../../../core/services/comment.service';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { MapViewComponent } from '../../../shared/components/map-view/map-view.component';
 import { StatCardComponent } from '../../../shared/components/dashboard/stat-card/stat-card.component';
 import { ChartCardComponent, DonutSlice, BarDataPoint } from '../../../shared/components/dashboard/chart-card/chart-card.component';
+import { StarRatingComponent } from '../../../shared/components/star-rating/star-rating.component';
 
 @Component({
   selector: 'app-branch-detail',
@@ -29,7 +32,8 @@ import { ChartCardComponent, DonutSlice, BarDataPoint } from '../../../shared/co
     LoadingSpinnerComponent,
     MapViewComponent,
     StatCardComponent,
-    ChartCardComponent
+    ChartCardComponent,
+    StarRatingComponent
   ],
   template: `
     <div class="branch-detail-wrapper" *ngIf="branch">
@@ -194,7 +198,7 @@ import { ChartCardComponent, DonutSlice, BarDataPoint } from '../../../shared/co
           >
             <span class="tab-icon">⭐</span>
             <span>Sharhlar</span>
-            <span class="tab-badge">0</span>
+            <span class="tab-badge" *ngIf="branchCommentsTotal > 0">{{ branchCommentsTotal }}</span>
           </button>
 
           <button 
@@ -467,13 +471,44 @@ import { ChartCardComponent, DonutSlice, BarDataPoint } from '../../../shared/co
           <div class="tab-header-row">
             <div>
               <h3 class="tab-section-title">Filial Mahsulotlariga Sharhlar</h3>
-              <p class="tab-section-subtitle">Mijozlar tomonidan qoldirilgan fikr va baholar</p>
+              <p class="tab-section-subtitle">Mijozlar tomonidan qoldirilgan fikr va baholar ({{ branchCommentsTotal }} ta)</p>
             </div>
+            <a routerLink="/admin/comments" class="btn btn-outline-primary btn-sm">
+              💬 Barcha sharhlar &rarr;
+            </a>
           </div>
-          <div class="empty-tab-state">
+
+          <div *ngIf="isCommentsLoading" class="tab-loading">Sharhlar yuklanmoqda...</div>
+
+          <div *ngIf="!isCommentsLoading && commentsError" class="empty-tab-state">
+            <div class="empty-icon">⚠️</div>
+            <h4>Sharhlarni yuklashda xatolik</h4>
+            <p>{{ commentsError }}</p>
+            <button type="button" class="btn btn-primary btn-sm" (click)="loadBranchComments()">Qayta urinish</button>
+          </div>
+
+          <div *ngIf="!isCommentsLoading && !commentsError && branchComments.length === 0" class="empty-tab-state">
             <div class="empty-icon">⭐</div>
             <h4>Sharhlar mavjud emas</h4>
             <p>Ushbu filial tovarlariga hozircha sharhlar qoldirilmagan.</p>
+          </div>
+
+          <div *ngIf="!isCommentsLoading && !commentsError && branchComments.length > 0" class="branch-comments-list">
+            <div *ngFor="let c of branchComments" class="branch-comment-card">
+              <div class="branch-comment-top">
+                <div class="branch-comment-meta">
+                  <a [routerLink]="['/products', c.productId]" class="comment-product-link">
+                    📦 {{ c.productName || ('Mahsulot #' + c.productId) }}
+                  </a>
+                  <span class="comment-author">👤 {{ c.userName || ('Mijoz #' + c.userId) }}</span>
+                </div>
+                <div class="branch-comment-right">
+                  <app-star-rating [rating]="c.starRating"></app-star-rating>
+                  <span class="comment-date-txt" *ngIf="c.createdAt">{{ c.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
+                </div>
+              </div>
+              <p class="branch-comment-body">{{ c.content }}</p>
+            </div>
           </div>
         </div>
 
@@ -1762,6 +1797,69 @@ import { ChartCardComponent, DonutSlice, BarDataPoint } from '../../../shared/co
     :host-context(.dark-theme) .m-lbl {
       color: #94a3b8;
     }
+
+    .branch-comments-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .branch-comment-card {
+      padding: 1rem;
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 12px;
+      background: var(--bg-subtle, #f8fafc);
+    }
+    .branch-comment-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+    .branch-comment-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .comment-product-link {
+      font-weight: 700;
+      color: var(--primary, #4f46e5);
+      text-decoration: none;
+    }
+    .comment-product-link:hover {
+      text-decoration: underline;
+    }
+    .comment-author,
+    .comment-date-txt {
+      font-size: 0.8rem;
+      color: var(--text-muted, #475569);
+    }
+    .branch-comment-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.25rem;
+    }
+    .branch-comment-body {
+      margin: 0;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: var(--text-main, #0f172a);
+    }
+    :host-context(body.dark-theme) .branch-comment-card,
+    :host-context(.dark-theme) .branch-comment-card {
+      background: #0f172a;
+      border-color: #22304d;
+    }
+    :host-context(body.dark-theme) .branch-comment-body,
+    :host-context(.dark-theme) .branch-comment-body {
+      color: #e2e8f0;
+    }
+    :host-context(body.dark-theme) .comment-product-link,
+    :host-context(.dark-theme) .comment-product-link {
+      color: #a5b4fc;
+    }
   `]
 })
 export class BranchDetailComponent implements OnInit {
@@ -1771,6 +1869,7 @@ export class BranchDetailComponent implements OnInit {
   private customerService = inject(CustomerService);
   private categoryService = inject(CategoryService);
   private orderService = inject(OrderService);
+  private commentService = inject(CommentService);
   private notification = inject(NotificationService);
   private fb = inject(FormBuilder);
   authState = inject(AuthStateService);
@@ -1795,6 +1894,12 @@ export class BranchDetailComponent implements OnInit {
   branchOrders: Order[] = [];
   branchOrdersCount: number | null = null;
   branchRevenue = 0;
+
+  branchComments: Comment[] = [];
+  branchCommentsTotal = 0;
+  isCommentsLoading = false;
+  hasLoadedComments = false;
+  commentsError = '';
 
   allCustomers: Customer[] = [];
   showAssignModal = false;
@@ -2064,6 +2169,10 @@ export class BranchDetailComponent implements OnInit {
       if (!this.branchOrders.length) {
         this.loadOrdersCount();
       }
+    } else if (tab === 'comments') {
+      if (!this.hasLoadedComments && this.branchId) {
+        this.loadBranchComments();
+      }
     } else if (tab === 'location') {
       // Invalidate map size so Leaflet renders cleanly if it was hidden
       setTimeout(() => {
@@ -2086,6 +2195,9 @@ export class BranchDetailComponent implements OnInit {
         }
         if (this.activeTab !== 'users') {
           this.loadUsers(true);
+        }
+        if (this.activeTab !== 'comments') {
+          this.loadBranchComments(true);
         }
         this.loadOrdersCount();
         this.loadCategories();
@@ -2129,6 +2241,34 @@ export class BranchDetailComponent implements OnInit {
         this.isProductsLoading = false;
       }
     });
+  }
+
+  loadBranchComments(background = false): void {
+    if (!background) {
+      this.isCommentsLoading = true;
+    }
+    this.commentsError = '';
+    const targetBranchId =
+      this.authState.isSuperAdmin() || this.authState.isCompanyAdmin()
+        ? this.branchId
+        : undefined;
+
+    this.commentService
+      .getByBranchPaged({ pageNumber: 1, pageSize: 12, sortBy: 'CreatedAt', isDescending: true }, targetBranchId)
+      .subscribe({
+        next: (res) => {
+          this.branchComments = res.items || [];
+          this.branchCommentsTotal = res.totalCount || this.branchComments.length;
+          this.hasLoadedComments = true;
+          this.isCommentsLoading = false;
+        },
+        error: () => {
+          this.isCommentsLoading = false;
+          if (!background) {
+            this.commentsError = "Sharhlarni yuklashda xatolik yuz berdi.";
+          }
+        }
+      });
   }
 
   loadUsers(background = false): void {

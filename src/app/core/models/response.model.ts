@@ -27,3 +27,17 @@ export function unwrapResult<T>(response: ResponseModel<T> | T): T {
   }
   return response as T;
 }
+
+export function getResponseMessage(response: any, fallback = "Amalni bajarishda xatolik yuz berdi"): string {
+  if (response && typeof response === 'object' && typeof response.message === 'string' && response.message.trim()) {
+    return response.message;
+  }
+  return fallback;
+}
+
+export function unwrapOrThrow<T>(response: ResponseModel<T> | T, fallbackMsg = "Amalni bajarishda xatolik yuz berdi"): T {
+  if (isErrorResponse(response)) {
+    throw new Error(getResponseMessage(response, fallbackMsg));
+  }
+  return unwrapResult(response);
+}

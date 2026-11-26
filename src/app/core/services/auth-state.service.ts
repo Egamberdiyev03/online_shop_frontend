@@ -27,7 +27,8 @@ export class AuthStateService {
   isSuperAdmin = computed(() => this.userRole() === 'SuperAdmin');
   isCompanyAdmin = computed(() => this.userRole() === 'CompanyAdmin');
   isBranchManager = computed(() => this.userRole() === 'BranchManager' || this.userRole() === 'BranchAdmin');
-  isCustomer = computed(() => this.userRole() === 'Customer' || (!this.isAdminRole() && !this.isSuperAdmin()));
+  isCurier = computed(() => this.userRole() === 'Curier');
+  isCustomer = computed(() => this.userRole() === 'Customer' || (!this.isAdminRole() && !this.isSuperAdmin() && !this.isCurier()));
 
   // SuperAdmin, CompanyAdmin, BranchManager/BranchAdmin rollari
   isAdminRole = computed(() => {
@@ -54,9 +55,9 @@ export class AuthStateService {
     return current ? roles.includes(current) : false;
   }
 
-  // Savat va savatga qo'shish faqat oddiy mijozlar uchun (adminlar xarid qilmaydi)
+  // Savat va savatga qo'shish faqat oddiy mijozlar uchun (adminlar va kuryerlar xarid qilmaydi)
   canUseCart = computed(() => {
-    if (this.isAdminRole() || this.isAdminMode()) {
+    if (this.isAdminRole() || this.isAdminMode() || this.isCurier()) {
       return false;
     }
     return true;
@@ -231,7 +232,7 @@ export class AuthStateService {
       this.setCustomerId(userId);
     }
 
-    const isAdmin = auth.role === 'SuperAdmin' || auth.role === 'CompanyAdmin' || auth.role === 'BranchManager';
+    const isAdmin = auth.role === 'SuperAdmin' || auth.role === 'CompanyAdmin' || auth.role === 'BranchManager' || auth.role === 'BranchAdmin';
     this.isAdminMode.set(isAdmin);
     localStorage.setItem(this.ADMIN_MODE_KEY, String(isAdmin));
   }

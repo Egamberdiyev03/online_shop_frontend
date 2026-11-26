@@ -11,7 +11,7 @@ import { TelegramService } from '../../core/services/telegram.service';
   imports: [CommonModule, RouterModule],
   template: `
     <nav class="bottom-nav">
-      <a routerLink="/products" routerLinkActive="active" class="nav-item" (click)="onNavClick()">
+      <a *ngIf="!authState.isCurier()" routerLink="/products" routerLinkActive="active" class="nav-item" (click)="onNavClick()">
         <span class="nav-icon">🏠</span>
         <span class="nav-label">Bosh sahifa</span>
       </a>
@@ -21,9 +21,19 @@ import { TelegramService } from '../../core/services/telegram.service';
         <span class="nav-label">Kategoriyalar</span>
       </a>
 
-      <a routerLink="/orders" routerLinkActive="active" class="nav-item" (click)="onNavClick()">
+      <a *ngIf="!authState.isCurier()" routerLink="/orders" routerLinkActive="active" class="nav-item" (click)="onNavClick()">
         <span class="nav-icon">📋</span>
         <span class="nav-label">Buyurtmalar</span>
+      </a>
+
+      <a *ngIf="authState.isCurier()" routerLink="/curier/dashboard" routerLinkActive="active" class="nav-item" (click)="onNavClick()">
+        <span class="nav-icon">🛵</span>
+        <span class="nav-label">Kabinet</span>
+      </a>
+
+      <a *ngIf="authState.isCurier()" routerLink="/curier/deliveries" routerLinkActive="active" class="nav-item" (click)="onNavClick()">
+        <span class="nav-icon">📦</span>
+        <span class="nav-label">Yetkazmalar</span>
       </a>
 
       <!-- Savat - faqat mijozlar uchun -->
@@ -37,6 +47,18 @@ import { TelegramService } from '../../core/services/telegram.service';
         <span class="nav-icon">🛒</span>
         <span class="cart-badge" *ngIf="cartService.cartCount() > 0">{{ cartService.cartCount() }}</span>
         <span class="nav-label">Savat</span>
+      </a>
+
+      <!-- Filial sharhlari - BranchAdmin, BranchManager, CompanyAdmin uchun -->
+      <a
+        *ngIf="authState.isAdminRole() && !authState.isSuperAdmin()"
+        routerLink="/admin/comments"
+        routerLinkActive="active"
+        class="nav-item"
+        (click)="onNavClick()"
+      >
+        <span class="nav-icon">💬</span>
+        <span class="nav-label">Sharhlar</span>
       </a>
 
       <!-- Admin panel - admin rollar uchun -->

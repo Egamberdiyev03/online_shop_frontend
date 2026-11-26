@@ -14,7 +14,8 @@ import {
   PaymentFilter,
   PagedResult
 } from '../models/payment.model';
-import { ResponseModel, unwrapResult } from '../models/response.model';
+import { CurierCashSummaryDto, HandOverCashDto } from '../models/curier.model';
+import { ResponseModel, unwrapResult, unwrapOrThrow } from '../models/response.model';
 import { AuthStateService } from './auth-state.service';
 import { OrderService } from './order.service';
 import { CustomerService } from './customer.service';
@@ -43,7 +44,7 @@ export class PaymentService {
 
     return this.http.post<ResponseModel<string> | string>(`${this.apiUrl}/upload-receipt`, formData).pipe(
       map(res => {
-        const unwrapped = unwrapResult(res);
+        const unwrapped = unwrapOrThrow(res as any, 'Chek rasmini yuklashda xatolik');
         return typeof unwrapped === 'string' ? unwrapped : (res as any)?.data || '';
       })
     );
@@ -61,10 +62,16 @@ export class PaymentService {
     return (payments || []).map(p => this.normalizePayment(p));
   }
 
-  // 2. To'lov yaratish (mijoz chek yuboradi)
+  // 2. To'lov yaratish (mijoz chek yuboradi; userId va amount backendda olinadi)
   createPayment(dto: CreatePaymentDto): Observable<Payment> {
-    return this.http.post<ResponseModel<Payment> | Payment>(`${this.apiUrl}/create`, dto).pipe(
-      map(res => this.normalizePayment(unwrapResult(res)))
+    const payload: CreatePaymentDto = {
+      orderId: dto.orderId,
+      paymentMethod: dto.paymentMethod,
+      ...(dto.chekUrl ? { chekUrl: dto.chekUrl } : {}),
+      ...(dto.transactionNote ? { transactionNote: dto.transactionNote } : {})
+    };
+    return this.http.post<ResponseModel<Payment> | Payment>(`${this.apiUrl}/create`, payload).pipe(
+      map(res => this.normalizePayment(unwrapOrThrow(res, 'To\'lov yaratishda xatolik')))
     );
   }
 
@@ -122,7 +129,7 @@ export class PaymentService {
       `${this.apiUrl}/confirm/${paymentId}`,
       null
     ).pipe(
-      map(res => this.normalizePayment(unwrapResult(res)))
+      map(res => this.normalizePayment(unwrapOrThrow(res, 'To\'lovni tasdiqlashda xatolik')))
     );
   }
 
@@ -132,7 +139,7 @@ export class PaymentService {
       `${this.apiUrl}/reject`,
       dto
     ).pipe(
-      map(res => this.normalizePayment(unwrapResult(res)))
+      map(res => this.normalizePayment(unwrapOrThrow(res, 'To\'lovni rad etishda xatolik')))
     );
   }
 
@@ -576,11 +583,17 @@ export class PaymentService {
           }
         }
 
+        const pendingPayments = scoped.filter(p => p.status === PaymentStatus.Pending);
+        const pendingCheckCount = pendingPayments.filter(p => (p.paymentMethod || '').toLowerCase() !== 'cash').length;
+        const cashPendingCount = pendingPayments.filter(p => (p.paymentMethod || '').toLowerCase() === 'cash').length;
+
         const summary: PaymentSummary = {
           totalCount: scoped.length,
           totalAmount: scoped.reduce((sum, p) => sum + (p.amount || 0), 0),
-          pendingCount: scoped.filter(p => p.status === PaymentStatus.Pending).length,
-          pendingAmount: scoped.filter(p => p.status === PaymentStatus.Pending).reduce((sum, p) => sum + (p.amount || 0), 0),
+          pendingCount: pendingPayments.length,
+          pendingCheckCount,
+          cashPendingCount,
+          pendingAmount: pendingPayments.reduce((sum, p) => sum + (p.amount || 0), 0),
           completedCount: scoped.filter(p => p.status === PaymentStatus.Completed).length,
           completedAmount: scoped.filter(p => p.status === PaymentStatus.Completed).reduce((sum, p) => sum + (p.amount || 0), 0),
           failedCount: scoped.filter(p => p.status === PaymentStatus.Failed).length,
@@ -606,5 +619,39 @@ export class PaymentService {
 
   private getCurrentUserId(): number {
     return this.authState.currentUser()?.userId || this.authState.currentCustomerId() || 1;
+  }
+
+  // ==================== CURIER CASH METHODS ====================
+
+  // Kuryer: Naqd pul yig'ish va buyurtmani yetkazildi deb belgilash
+  collectCash(orderId: number): Observable<boolean> {
+    return this.http.put<ResponseModel<boolean>>(`${this.apiUrl}/orders/${orderId}/collect-cash`, null).pipe(
+      map(res => unwrapOrThrow(res, 'Naqd pul yig\'ishda xatolik') === true)
+    );
+  }
+
+  // Kuryer: O'z qarzini ko'rish
+  getMyCashSummary(branchId?: number): Observable<CurierCashSummaryDto> {
+    let url = `${this.apiUrl}/cash/my-summary`;
+    if (branchId) url += `?branchId=${branchId}`;
+    return this.http.get<ResponseModel<CurierCashSummaryDto>>(url).pipe(
+      map(res => unwrapOrThrow(res, 'Kassa hisobotini yuklashda xatolik'))
+    );
+  }
+
+  // Admin: Kuryer qarzini ko'rish
+  getCurierCashSummary(curierProfileId: number, branchId?: number): Observable<CurierCashSummaryDto> {
+    let url = `${this.apiUrl}/cash/${curierProfileId}/summary`;
+    if (branchId) url += `?branchId=${branchId}`;
+    return this.http.get<ResponseModel<CurierCashSummaryDto>>(url).pipe(
+      map(res => unwrapOrThrow(res, 'Kuryer qarzini yuklashda xatolik'))
+    );
+  }
+
+  // Admin: Kuryerdan pul qabul qilish
+  handOverCash(dto: HandOverCashDto): Observable<boolean> {
+    return this.http.post<ResponseModel<boolean>>(`${this.apiUrl}/cash/handover`, dto).pipe(
+      map(res => unwrapOrThrow(res, 'Pul qabul qilishda xatolik') === true)
+    );
   }
 }

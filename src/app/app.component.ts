@@ -9,6 +9,8 @@ import { AuthService } from './core/services/auth.service';
 import { AuthStateService } from './core/services/auth-state.service';
 import { TelegramService } from './core/services/telegram.service';
 import { BackButtonService } from './core/services/back-button.service';
+import { UserNotificationService } from './core/services/user-notification.service';
+import { CurierLocationService } from './core/services/curier-location.service';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +26,8 @@ export class AppComponent implements OnInit {
   private authState = inject(AuthStateService);
   tg = inject(TelegramService);
   private backButton = inject(BackButtonService); // Telegram BackButton boshqaruvi
+  private userNotification = inject(UserNotificationService); // Global SignalR va kuryer ovozli xabarlari
+  private curierLocation = inject(CurierLocationService); // Kuryer Online bo'lganda barcha sahifalarda GPS yuborish
 
   ngOnInit(): void {
     try {

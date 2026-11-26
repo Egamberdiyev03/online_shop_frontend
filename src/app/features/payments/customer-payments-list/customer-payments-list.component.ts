@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { PaymentService } from '../../../core/services/payment.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
-import { PaymentListItem, PaymentStatus, PaymentFilter } from '../../../core/models/payment.model';
+import { PaymentListItem, PaymentStatus, PaymentFilter, isValidDisplayDate } from '../../../core/models/payment.model';
 import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-status-badge/payment-status-badge.component';
 
 @Component({
@@ -113,7 +113,7 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
             <div class="id-wrap">
               <span class="pay-id">To‘lov #{{ p.id }}</span>
               <span class="order-link-pill" (click)="$event.stopPropagation()">
-                <a [routerLink]="['/orders']">Buyurtma #{{ p.orderId }}</a>
+                <a [routerLink]="['/orders']" [queryParams]="{ orderId: p.orderId }">Buyurtma #{{ p.orderId }}</a>
               </span>
             </div>
             <app-payment-status-badge [status]="p.status"></app-payment-status-badge>
@@ -128,7 +128,7 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
 
             <!-- Meta details -->
             <div class="meta-details-list">
-              <div class="meta-line">
+              <div class="meta-line" *ngIf="isValidDate(p.createdAt)">
                 <span class="meta-label">📅 Sana:</span>
                 <span class="meta-val">{{ p.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
               </div>
@@ -152,10 +152,12 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
 
               <div class="meta-line">
                 <span class="meta-label">💳 To‘lov usuli:</span>
-                <span class="meta-val">{{ p.paymentMethod || 'Karta orqali o‘tkazma' }}</span>
+                <span class="meta-val">
+                  {{ p.paymentMethod === 'Cash' ? '💵 Naqd (pulni kuryerga topshirasiz)' : '💳 Karta orqali o‘tkazma' }}
+                </span>
               </div>
 
-              <div class="meta-line">
+              <div class="meta-line" *ngIf="p.paymentMethod !== 'Cash'">
                 <span class="meta-label">🧾 Chek:</span>
                 <span class="receipt-status-tag" [class.has-receipt]="!!p.chekUrl">
                   {{ p.chekUrl ? 'Yuklangan ✓' : 'Yuklanmagan' }}
@@ -177,19 +179,27 @@ import { PaymentStatusBadgeComponent } from '../../../shared/components/payment-
         </div>
       </div>
 
-      <!-- Load More / Pagination -->
+      <!-- Pagination Controls -->
       <div class="load-more-section" *ngIf="!isLoading && !hasError && totalPages > 1">
         <div class="page-info-text">
-          {{ Math.min(displayedCount, filteredPayments.length) }} / {{ filteredPayments.length }} ta to‘lov ko‘rsatilmoqda
+          Sahifa {{ currentPage }} / {{ totalPages }} · Jami {{ totalCount }} ta to‘lov
         </div>
-        <div class="load-more-actions">
-          <button 
-            *ngIf="displayedCount < filteredPayments.length"
-            type="button" 
+        <div class="load-more-actions" style="display: flex; gap: 0.65rem;">
+          <button
+            type="button"
             class="btn btn-secondary load-more-btn"
-            (click)="loadMore()"
+            [disabled]="!hasPreviousPage || isLoading"
+            (click)="goToPage(currentPage - 1)"
           >
-            Yana yuklash ({{ Math.min(pageSize, filteredPayments.length - displayedCount) }} ta)
+            &larr; Oldingi
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary load-more-btn"
+            [disabled]="!hasNextPage || isLoading"
+            (click)="goToPage(currentPage + 1)"
+          >
+            Keyingi &rarr;
           </button>
         </div>
       </div>
@@ -553,6 +563,7 @@ export class CustomerPaymentsListComponent implements OnInit {
 
   public PaymentStatus = PaymentStatus;
   public Math = Math;
+  isValidDate = isValidDisplayDate;
 
   allPayments: PaymentListItem[] = [];
   filteredPayments: PaymentListItem[] = [];
@@ -563,29 +574,41 @@ export class CustomerPaymentsListComponent implements OnInit {
 
   selectedStatus: PaymentStatus | null = null;
   pageSize = 6;
-  displayedCount = 6;
-
-  get totalPages(): number {
-    return Math.ceil(this.filteredPayments.length / this.pageSize);
-  }
+  currentPage = 1;
+  totalCount = 0;
+  totalPages = 1;
+  hasPreviousPage = false;
+  hasNextPage = false;
 
   ngOnInit(): void {
     this.loadPayments();
   }
 
-  loadPayments(): void {
+  loadPayments(page: number = this.currentPage): void {
     this.isLoading = true;
     this.hasError = false;
 
-    // Load all payments for this customer (PaymentService handles customer scoping automatically)
-    this.paymentService.getPayments({
-      pageNumber: 1,
-      pageSize: 50,
-      sortBy: 'createdAt',
-      sortDirection: 'desc'
-    }).subscribe({
+    this.paymentService.getPaymentsByUserId(page, this.pageSize).subscribe({
       next: (res) => {
-        this.allPayments = res.items;
+        this.allPayments = (res.items || []).map(p => ({
+          id: p.id,
+          orderId: p.orderId,
+          amount: p.amount,
+          status: p.status,
+          createdAt: p.createdAt,
+          paymentMethod: p.paymentMethod,
+          chekUrl: p.chekUrl,
+          transactionNote: p.transactionNote,
+          branchName: (p as any).branchName,
+          confirmedAt: p.confirmedAt,
+          confirmedByUserId: p.confirmedByUserId,
+          rejectionReason: p.rejectionReason
+        }));
+        this.currentPage = res.pageNumber || page;
+        this.totalCount = res.totalCount || this.allPayments.length;
+        this.totalPages = res.totalPages || 1;
+        this.hasPreviousPage = res.hasPreviousPage ?? this.currentPage > 1;
+        this.hasNextPage = res.hasNextPage ?? this.currentPage < this.totalPages;
         this.applyFilter();
         this.isLoading = false;
       },
@@ -598,7 +621,6 @@ export class CustomerPaymentsListComponent implements OnInit {
 
   setStatusFilter(status: PaymentStatus | null): void {
     this.selectedStatus = status;
-    this.displayedCount = this.pageSize;
     this.applyFilter();
   }
 
@@ -608,16 +630,12 @@ export class CustomerPaymentsListComponent implements OnInit {
     } else {
       this.filteredPayments = this.allPayments.filter(p => p.status === this.selectedStatus);
     }
-    this.updatePagination();
+    this.paginatedPayments = this.filteredPayments;
   }
 
-  updatePagination(): void {
-    this.paginatedPayments = this.filteredPayments.slice(0, this.displayedCount);
-  }
-
-  loadMore(): void {
-    this.displayedCount += this.pageSize;
-    this.updatePagination();
+  goToPage(page: number): void {
+    if (page < 1 || page > this.totalPages || this.isLoading) return;
+    this.loadPayments(page);
   }
 
   getCountByStatus(status: PaymentStatus): number {

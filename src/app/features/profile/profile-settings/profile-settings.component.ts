@@ -16,6 +16,7 @@ import { Customer, UpdateCustomerDto } from '../../../core/models/customer.model
     <div class="settings-page">
       <!-- Header -->
       <header class="page-header">
+        <a routerLink="/profile" class="back-link">&larr; Profilga qaytish</a>
         <h1 class="page-title">Sozlamalar</h1>
       </header>
 
@@ -120,6 +121,23 @@ import { Customer, UpdateCustomerDto } from '../../../core/models/customer.model
     /* Header */
     .page-header {
       margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--primary, #4f46e5);
+      text-decoration: none;
+      align-self: flex-start;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
     }
 
     .page-title {

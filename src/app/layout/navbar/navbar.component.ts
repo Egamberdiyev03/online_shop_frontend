@@ -1,22 +1,30 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, effect, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule, Router } from '@angular/router';
+import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { Subscription, of } from 'rxjs';
+import { catchError, filter } from 'rxjs/operators';
 import { CartService } from '../../core/services/cart.service';
 import { AuthStateService } from '../../core/services/auth-state.service';
+import { CurierService } from '../../core/services/curier.service';
+import { OrderService } from '../../core/services/order.service';
+import { PaymentService } from '../../core/services/payment.service';
 import { ThemeService } from '../../core/services/theme.service';
+import { UserNotificationService } from '../../core/services/user-notification.service';
+import { PaymentStatus } from '../../core/models/payment.model';
 import { NotificationBellComponent } from '../../shared/components/notification-bell/notification-bell.component';
+import { ImageUrlPipe } from '../../shared/pipes/image-url.pipe';
 
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, NotificationBellComponent],
+  imports: [CommonModule, RouterModule, FormsModule, NotificationBellComponent, ImageUrlPipe],
   template: `
     <header class="navbar-wrapper">
       <nav class="main-nav">
         <div class="nav-container">
           <!-- Brand Logo -->
-          <a routerLink="/" class="brand-logo">
+          <a [routerLink]="authState.isCurier() ? '/curier/dashboard' : '/'" class="brand-logo" (click)="closeMobileMenu()">
             <div class="logo-icon">🛍️</div>
             <div class="logo-text">
               <span class="brand-name">Online<strong>Shop</strong></span>
@@ -24,64 +32,12 @@ import { NotificationBellComponent } from '../../shared/components/notification-
             </div>
           </a>
 
-          <!-- Main Nav Links -->
+          <!-- Desktop Main Nav Links (bitta qator, white-space: nowrap) -->
           <div class="nav-links">
-            <a routerLink="/products" routerLinkActive="active" class="nav-link">
-              Mahsulotlar
-            </a>
-
-            @if (authState.isSuperAdmin()) {
-              <a routerLink="/companies" routerLinkActive="active" class="nav-link">
-                Kompaniyalar
-              </a>
-            }
-
-            @if (authState.isSuperAdmin()) {
-              <a routerLink="/categories" routerLinkActive="active" class="nav-link">
-                Kategoriyalar
-              </a>
-            }
-
-            <a routerLink="/orders" routerLinkActive="active" class="nav-link">
-              Buyurtmalar
-            </a>
-
-            <a routerLink="/map" routerLinkActive="active" class="nav-link">
-              Xarita
-            </a>
-
-            @if (authState.isCompanyAdmin() && authState.userCompanyId()) {
-              <a
-                [routerLink]="['/companies', authState.userCompanyId()]"
-                routerLinkActive="active"
-                class="nav-link"
-              >
-                Mening Kompaniyam
-              </a>
-            }
-
-            @if (authState.isBranchManager() && authState.userBranchId()) {
-              <a
-                [routerLink]="['/branches', authState.userBranchId()]"
-                routerLinkActive="active"
-                class="nav-link"
-              >
-                Mening Filialim
-              </a>
-            }
-
-            @if (authState.isAdminRole()) {
-              <a
-                routerLink="/admin/payments"
-                routerLinkActive="active"
-                class="nav-link"
-              >
-                💳 To'lovlar
-              </a>
-            }
+            <ng-container *ngTemplateOutlet="navLinksTpl; context: { isMobile: false }"></ng-container>
           </div>
 
-          <!-- Right Actions: [Tema] [Bildirishnoma] [Savat] [Profil] -->
+          <!-- Right Actions: [Tema] [Bildirishnoma] [Savat] [Profil] [Gamburger] -->
           <div class="nav-actions">
             <!-- Tema tugmasi -->
             @if (authState.isAuthenticated()) {
@@ -117,6 +73,7 @@ import { NotificationBellComponent } from '../../shared/components/notification-
                 class="cart-pill-btn"
                 routerLinkActive="active"
                 title="Savatcha"
+                (click)="closeMobileMenu()"
               >
                 <span class="cart-icon">🛒</span>
                 <span class="cart-title">Savat</span>
@@ -131,8 +88,20 @@ import { NotificationBellComponent } from '../../shared/components/notification-
                 routerLinkActive="active"
                 class="profile-link"
                 title="Profil"
+                (click)="closeMobileMenu()"
               >
-                <span class="profile-avatar">{{ userInitials }}</span>
+                <span class="profile-avatar">
+                  @if (profilePictureUrl && !avatarBroken) {
+                    <img
+                      [src]="profilePictureUrl | imageUrl"
+                      [alt]="authState.userName()"
+                      class="profile-avatar-img"
+                      (error)="avatarBroken = true"
+                    />
+                  } @else {
+                    {{ userInitials }}
+                  }
+                </span>
                 <span class="profile-text">Profil</span>
               </a>
             }
@@ -140,14 +109,152 @@ import { NotificationBellComponent } from '../../shared/components/notification-
             <!-- Mehmon uchun -->
             @if (!authState.isAuthenticated()) {
               <div class="auth-buttons">
-                <a routerLink="/login" class="btn btn-secondary btn-sm">Kirish</a>
-                <a routerLink="/register" class="btn btn-primary btn-sm">Ro'yxatdan o'tish</a>
+                <a routerLink="/login" class="btn btn-secondary btn-sm" (click)="closeMobileMenu()">Kirish</a>
+                <a routerLink="/register" class="btn btn-primary btn-sm" (click)="closeMobileMenu()">Ro'yxatdan o'tish</a>
               </div>
             }
+
+            <!-- Gamburger tugma (kichik ekranlarda) -->
+            <button
+              type="button"
+              class="hamburger-btn"
+              (click)="toggleMobileMenu($event)"
+              [attr.aria-expanded]="mobileMenuOpen"
+              aria-label="Navigatsiya menyusi"
+            >
+              @if (mobileMenuOpen) {
+                <svg class="hamburger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              } @else {
+                <svg class="hamburger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <line x1="3" y1="12" x2="21" y2="12"/>
+                  <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+              }
+            </button>
           </div>
         </div>
+
+        <!-- Mobile Hamburger Drawer -->
+        @if (mobileMenuOpen) {
+          <div class="mobile-nav-drawer" (click)="$event.stopPropagation()">
+            <ng-container *ngTemplateOutlet="navLinksTpl; context: { isMobile: true }"></ng-container>
+          </div>
+        }
       </nav>
     </header>
+
+    <!-- Umumiy navigatsiya bandlari shabloni -->
+    <ng-template #navLinksTpl let-isMobile="isMobile">
+      @if (showProductsInNavbar) {
+        <a
+          routerLink="/products"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          Mahsulotlar
+        </a>
+      }
+
+      @if (authState.isSuperAdmin()) {
+        <a
+          routerLink="/companies"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          Kompaniyalar
+        </a>
+        <a
+          routerLink="/categories"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          Kategoriyalar
+        </a>
+      }
+
+      @if (!authState.isCurier()) {
+        <a
+          routerLink="/orders"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          <span>Buyurtmalar</span>
+          @if (authState.isAdminRole() && pendingOrdersCount > 0) {
+            <span class="nav-count-badge" title="Kutilayotgan (Pending) buyurtmalar">{{ pendingOrdersCount }}</span>
+          }
+        </a>
+      }
+
+      @if (authState.isCurier()) {
+        <a
+          routerLink="/curier/dashboard"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          🛵 Kuryer kabineti
+        </a>
+        <a
+          routerLink="/curier/deliveries"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          📦 Yetkazmalarim
+        </a>
+      }
+
+      @if (authState.isCompanyAdmin() && authState.userCompanyId()) {
+        <a
+          [routerLink]="['/companies', authState.userCompanyId()]"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          Mening Kompaniyam
+        </a>
+      }
+
+      @if (authState.isAdminRole()) {
+        <a
+          routerLink="/admin/payments"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          <span>💳 To'lovlar</span>
+          @if (pendingPaymentsCount > 0) {
+            <span class="nav-count-badge" title="Tasdiqlanmagan cheklar">{{ pendingPaymentsCount }}</span>
+          }
+        </a>
+        <a
+          routerLink="/admin/curiers"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          🛵 Kuryerlar
+        </a>
+      }
+
+      @if (authState.isSuperAdmin() || authState.userRole() === 'BranchManager') {
+        <a
+          routerLink="/admin/cash"
+          routerLinkActive="active"
+          [class]="isMobile ? 'mobile-nav-link' : 'nav-link'"
+          (click)="closeMobileMenu()"
+        >
+          💵 Naqd pul
+        </a>
+      }
+    </ng-template>
   `,
   styles: [`
     .navbar-wrapper {
@@ -169,7 +276,7 @@ import { NotificationBellComponent } from '../../shared/components/notification-
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 1.5rem;
+      gap: 1rem;
     }
 
     /* Brand Logo */
@@ -178,6 +285,7 @@ import { NotificationBellComponent } from '../../shared/components/notification-
       align-items: center;
       gap: 0.625rem;
       text-decoration: none;
+      flex-shrink: 0;
     }
 
     .logo-icon {
@@ -222,17 +330,39 @@ import { NotificationBellComponent } from '../../shared/components/notification-
     .nav-links {
       display: flex;
       align-items: center;
-      gap: 0.35rem;
+      gap: 0.25rem;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
 
     .nav-link {
-      padding: 0.55rem 0.95rem;
-      font-size: 0.925rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.48rem 0.72rem;
+      font-size: 0.875rem;
       font-weight: 600;
       color: #475569;
       text-decoration: none;
       border-radius: 8px;
+      white-space: nowrap;
+      flex-shrink: 0;
       transition: all 0.2s ease;
+    }
+
+    .nav-count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      border-radius: 9999px;
+      background: #ef4444;
+      color: #ffffff;
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1;
     }
 
     .nav-link:hover {
@@ -250,7 +380,38 @@ import { NotificationBellComponent } from '../../shared/components/notification-
     .nav-actions {
       display: flex;
       align-items: center;
-      gap: 0.625rem;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .hamburger-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--bg-subtle, #f1f5f9);
+      color: var(--text-primary, #0f172a);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .hamburger-btn:hover {
+      background: #eef2ff;
+      border-color: #6366f1;
+      color: #4f46e5;
+    }
+
+    .hamburger-icon {
+      width: 20px;
+      height: 20px;
+    }
+
+    .mobile-nav-drawer {
+      display: none;
     }
 
     /* Theme Toggle Button */
@@ -362,6 +523,15 @@ import { NotificationBellComponent } from '../../shared/components/notification-
       font-weight: 700;
       border-radius: 50%;
       text-transform: uppercase;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .profile-avatar-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
 
     .profile-text {
@@ -491,19 +661,38 @@ import { NotificationBellComponent } from '../../shared/components/notification-
       background: #334155;
     }
 
-    /* Mobile Responsive */
-    @media (max-width: 860px) {
+    :host-context(body.dark-theme) .hamburger-btn {
+      background: #1e293b;
+      border-color: #334155;
+      color: #e2e8f0;
+    }
+
+    :host-context(body.dark-theme) .mobile-nav-drawer {
+      background: #0f172a;
+      border-top-color: #1e293b;
+    }
+
+    :host-context(body.dark-theme) .mobile-nav-link {
+      color: #cbd5e1;
+      background: #1e293b;
+    }
+
+    :host-context(body.dark-theme) .mobile-nav-link.active {
+      background: #1e1b4b;
+      color: #a5b4fc;
+    }
+
+    /* Tablet / Mobile Responsive -> Hamburger Menyuga O'tish */
+    @media (max-width: 1024px) {
       .main-nav {
-        padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+        padding: 0.55rem 0.75rem;
       }
 
       .nav-container {
-        flex-wrap: wrap;
-        gap: 0.4rem 0.5rem;
+        gap: 0.5rem;
       }
 
       .brand-logo {
-        order: 1;
         gap: 0.4rem;
       }
 
@@ -522,8 +711,15 @@ import { NotificationBellComponent } from '../../shared/components/notification-
         display: none;
       }
 
+      .nav-links {
+        display: none;
+      }
+
+      .hamburger-btn {
+        display: inline-flex;
+      }
+
       .nav-actions {
-        order: 2;
         gap: 0.4rem;
       }
 
@@ -580,42 +776,91 @@ import { NotificationBellComponent } from '../../shared/components/notification-
       .auth-buttons .btn {
         padding: 0.35rem 0.65rem;
         font-size: 0.75rem;
-      }
-
-      .nav-links {
-        order: 3;
-        width: 100%;
-        display: flex;
-        overflow-x: auto;
         white-space: nowrap;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        padding: 0.35rem 0 0.15rem;
-        gap: 0.25rem;
-        border-top: 1px solid rgba(226, 232, 240, 0.7);
       }
 
-      :host-context(body.dark-theme) .nav-links {
-        border-top-color: #1e293b;
+      .mobile-nav-drawer {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        margin-top: 0.6rem;
+        padding-top: 0.65rem;
+        border-top: 1px solid #e2e8f0;
       }
 
-      .nav-links::-webkit-scrollbar {
-        display: none;
+      .mobile-nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.65rem 0.85rem;
+        border-radius: 10px;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
       }
 
-      .nav-link {
-        flex: 0 0 auto;
-        padding: 0.35rem 0.65rem;
-        font-size: 0.825rem;
-        border-radius: 6px;
+      .mobile-nav-link.active {
+        background: #eef2ff;
+        color: #4f46e5;
+        font-weight: 700;
       }
     }
   `]
 })
-export class NavbarComponent implements OnInit {
+export class NavbarComponent implements OnInit, OnDestroy {
   cartService = inject(CartService);
   authState = inject(AuthStateService);
+  curierService = inject(CurierService);
+  private orderService = inject(OrderService);
+  private paymentService = inject(PaymentService);
+  private userNotification = inject(UserNotificationService);
   themeService = inject(ThemeService);
+  private router = inject(Router);
+
+  avatarBroken = false;
+  mobileMenuOpen = false;
+  pendingOrdersCount = 0;
+  pendingPaymentsCount = 0;
+
+  private sub = new Subscription();
+  private lastBadgeFetchAt = 0;
+
+  constructor() {
+    effect(() => {
+      this.curierService.myProfile()?.profilePictureUrl;
+      this.avatarBroken = false;
+    });
+
+    effect(() => {
+      const isAuth = this.authState.isAuthenticated();
+      const role = this.authState.userRole();
+      // Yangi bildirishnoma kelganda ham admin nishonlari yangilansin
+      this.userNotification.unreadCount();
+
+      if (isAuth && role && this.authState.isAdminRole()) {
+        this.loadAdminBadges();
+      } else {
+        this.pendingOrdersCount = 0;
+        this.pendingPaymentsCount = 0;
+      }
+    });
+  }
+
+  get showProductsInNavbar(): boolean {
+    if (this.authState.isCurier()) return false;
+    // BranchAdmin mahsulotlarni boshqarmaydi (ProductController da ruxsat yo'q) -> Profil menyusiga ko'chirildi
+    if (this.authState.userRole() === 'BranchAdmin') return false;
+    return true;
+  }
+
+  get profilePictureUrl(): string {
+    if (!this.authState.isCurier()) return '';
+    return this.curierService.myProfile()?.profilePictureUrl?.trim() || '';
+  }
 
   get userInitials(): string {
     const name = this.authState.userName() || '';
@@ -630,12 +875,82 @@ export class NavbarComponent implements OnInit {
     this.themeService.toggleTheme();
   }
 
+  toggleMobileMenu(event: Event): void {
+    event.stopPropagation();
+    this.mobileMenuOpen = !this.mobileMenuOpen;
+  }
+
+  closeMobileMenu(): void {
+    this.mobileMenuOpen = false;
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    if (this.mobileMenuOpen) {
+      this.mobileMenuOpen = false;
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    this.mobileMenuOpen = false;
+  }
+
   ngOnInit(): void {
-    if (this.authState.isAuthenticated() && !this.authState.isAdminRole()) {
+    this.sub.add(
+      this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => {
+        this.mobileMenuOpen = false;
+        if (this.authState.isAuthenticated() && this.authState.isAdminRole()) {
+          this.loadAdminBadges();
+        }
+      })
+    );
+
+    if (this.authState.isAuthenticated() && this.authState.canUseCart()) {
       const userId = this.authState.currentCustomerId();
       if (userId > 0) {
         this.cartService.getByCustomerId(userId).subscribe({ error: () => {} });
       }
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.sub.unsubscribe();
+  }
+
+  private loadAdminBadges(): void {
+    const now = Date.now();
+    if (now - this.lastBadgeFetchAt < 500) return;
+    this.lastBadgeFetchAt = now;
+
+    const role = this.authState.userRole();
+    const branchId = (role === 'BranchManager' || role === 'BranchAdmin')
+      ? (this.authState.userBranchId() || undefined)
+      : undefined;
+
+    // 1. Tasdiqlanmagan cheklar soni (Cash to'lovlarda chek yo'q)
+    this.paymentService.getAllPayments(PaymentStatus.Pending, branchId).pipe(
+      catchError(() => of([]))
+    ).subscribe(payments => {
+      this.pendingPaymentsCount = (payments || []).filter(p => p.paymentMethod !== 'Cash').length;
+    });
+
+    // 2. Pending buyurtmalar soni
+    // TODO: OrderController.cs (GetAll / GetOrdersByBranchId) ga BranchAdmin roli qo'shilmagani sababli
+    // BranchAdmin uchun 403 bermaslik maqsadida Pending buyurtmalar soni so'rovi hozircha faqat
+    // SuperAdmin, CompanyAdmin va BranchManager uchun yuboriladi.
+    if (role === 'SuperAdmin' || role === 'CompanyAdmin' || role === 'BranchManager') {
+      this.orderService.getAllPaged({
+        pageNumber: 1,
+        pageSize: 1,
+        filters: { status: 'Pending' }
+      }).pipe(
+        catchError(() => of({ items: [], totalCount: 0, pageNumber: 1, pageSize: 1, totalPages: 0, hasPreviousPage: false, hasNextPage: false }))
+      ).subscribe(res => {
+        this.pendingOrdersCount = res?.totalCount || 0;
+      });
+    } else {
+      this.pendingOrdersCount = 0;
     }
   }
 }

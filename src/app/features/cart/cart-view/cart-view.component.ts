@@ -2,12 +2,15 @@ import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { switchMap, of } from 'rxjs';
 import { Cart, CartItem } from '../../../core/models/cart.model';
 import { Product } from '../../../core/models/product.model';
 import { CompanyBranch } from '../../../core/models/company-branch.model';
+import { CreateOrderDto } from '../../../core/models/order.model';
 import { CartService } from '../../../core/services/cart.service';
 import { ProductService } from '../../../core/services/product.service';
 import { OrderService } from '../../../core/services/order.service';
+import { PaymentService } from '../../../core/services/payment.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { NotificationService } from '../../../core/services/notification.service';
@@ -174,20 +177,115 @@ interface EnrichedCartItem extends CartItem {
               </span>
             </div>
 
-            <!-- Checkout Branch Info -->
-            <div class="checkout-form-box">
-              <div class="branch-auto-notice" (click)="toggleBranchDetails()">
-                <span class="notice-icon">🏢</span>
-                <p class="notice-text">
-                  Buyurtma mahsulot joylashgan filialga avtomatik yuboriladi.
-                </p>
-                <span class="branch-toggle-hint" *ngIf="cartBranches.length > 0">
-                  {{ showBranchDetails ? '▲ Yopish' : '▼ Manzilni korish' }}
-                </span>
+            <!-- Qabul qilish va to'lov usuli (Chalkashliksiz aniq tanlov) -->
+            <div class="checkout-form-box payment-method-section">
+              <label class="form-label">Qabul qilish va to'lov usuli *</label>
+              <div class="pay-method-list">
+                <label class="pay-method-card" [class.selected]="checkoutMode === 'cash_delivery'">
+                  <input type="radio" name="checkoutMode" value="cash_delivery" [(ngModel)]="checkoutMode" />
+                  <span class="pm-icon">🛵</span>
+                  <div class="pm-text">
+                    <strong>Naqd pul (Yetkazib berish)</strong>
+                    <small>Kuryer olib boradi, pulini qo'liga berasiz</small>
+                  </div>
+                </label>
+
+                <label class="pay-method-card" [class.selected]="checkoutMode === 'card'">
+                  <input type="radio" name="checkoutMode" value="card" [(ngModel)]="checkoutMode" />
+                  <span class="pm-icon">💳</span>
+                  <div class="pm-text">
+                    <strong>Karta orqali to'lov</strong>
+                    <small>Kartaga o'tkazib, chek rasmini yuklaysiz</small>
+                  </div>
+                </label>
+
+                <label class="pay-method-card" [class.selected]="checkoutMode === 'pickup'">
+                  <input type="radio" name="checkoutMode" value="pickup" [(ngModel)]="checkoutMode" />
+                  <span class="pm-icon">🏬</span>
+                  <div class="pm-text">
+                    <strong>Filialdan borib olish</strong>
+                    <small>O'zingiz filialga borib olib ketasiz</small>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- 1. NAQD (YETKAZIB BERISH) BO'LSA -> YETKAZIB BERISH MANZILI -->
+            <ng-container *ngIf="checkoutMode === 'cash_delivery'">
+              <div class="checkout-form-box">
+                <label class="form-label">📍 Yetkazib berish manzili</label>
+                <div class="delivery-location-box" *ngIf="deliveryLocation">
+                  <div class="location-info">
+                    <span class="loc-icon">📍</span>
+                    <span class="loc-address">{{ deliveryLocation.address }}</span>
+                  </div>
+                  <button type="button" class="change-loc-btn" (click)="openLocationPicker()">
+                    O'zgartirish
+                  </button>
+                </div>
+                <button
+                  *ngIf="!deliveryLocation"
+                  type="button"
+                  class="btn btn-outline-primary btn-location"
+                  (click)="openLocationPicker()"
+                >
+                  <span>📍</span> Xaritadan yetkazib berish manzilini tanlash
+                </button>
               </div>
 
-              <!-- Filial tafsilotlari -->
-              <div class="branch-details-list" *ngIf="showBranchDetails && cartBranches.length > 0">
+              <div class="cash-notice-box">
+                💵 Buyurtma yetkazilganda pulni kuryerga naqd topshirasiz. Chek yuklash shart emas.
+              </div>
+            </ng-container>
+
+            <!-- 2. KARTA ORQALI BO'LSA -> KARTA + CHEK + FILIAL MANZILI -->
+            <ng-container *ngIf="checkoutMode === 'card'">
+              <div class="card-transfer-box">
+                <div class="card-copy-strip">
+                  <div>
+                    <div class="card-copy-label">HUMO / UZCARD karta raqami:</div>
+                    <strong class="card-copy-num">9860 3501 2345 6789</strong>
+                  </div>
+                  <button type="button" class="copy-btn-sm" (click)="copyCardNumber('9860350123456789')">
+                    📋 Nusxa
+                  </button>
+                </div>
+
+                <div class="receipt-upload-label" (click)="receiptFileInput.click()">
+                  <input
+                    #receiptFileInput
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                    (change)="onReceiptFileSelected($event)"
+                    style="display: none"
+                  />
+                  <ng-container *ngIf="!selectedReceiptFile">
+                    <span>📎 To'lov chekini yuklang * (JPG, PNG, PDF, maks 5MB)</span>
+                  </ng-container>
+                  <ng-container *ngIf="selectedReceiptFile">
+                    <div class="receipt-selected-row">
+                      <img
+                        *ngIf="selectedReceiptPreview && !selectedReceiptFile.name.toLowerCase().endsWith('.pdf')"
+                        [src]="selectedReceiptPreview"
+                        alt="Chek"
+                        class="receipt-mini-thumb"
+                      />
+                      <span *ngIf="selectedReceiptFile.name.toLowerCase().endsWith('.pdf')">📄</span>
+                      <span class="receipt-file-name">{{ selectedReceiptFile.name }}</span>
+                      <button type="button" class="remove-receipt-btn" (click)="removeReceiptFile($event)">✕</button>
+                    </div>
+                  </ng-container>
+                </div>
+              </div>
+            </ng-container>
+
+            <!-- 3. BORIB OLISH YOKI KARTA TANLANGANDA -> FILIAL MANZILI KO'RSATILADI -->
+            <div class="checkout-form-box" *ngIf="checkoutMode === 'card' || checkoutMode === 'pickup'">
+              <label class="form-label">🏢 Filial manzili</label>
+              <div class="cash-notice-box" *ngIf="checkoutMode === 'pickup'" style="margin-bottom: 0.65rem;">
+                🏬 Buyurtmani quyidagi filialdan o'zingiz borib olib ketasiz (to'lov filialda qilinadi).
+              </div>
+              <div class="branch-details-list" *ngIf="cartBranches.length > 0; else branchLoadingNote">
                 <div
                   class="branch-detail-item"
                   *ngFor="let branch of cartBranches"
@@ -216,33 +314,27 @@ interface EnrichedCartItem extends CartItem {
                   </span>
                 </div>
               </div>
+              <ng-template #branchLoadingNote>
+                <div class="branch-auto-notice">
+                  <span class="notice-icon">🏢</span>
+                  <p class="notice-text">Buyurtma mahsulot joylashgan filialga yuboriladi.</p>
+                </div>
+              </ng-template>
             </div>
 
-            <!-- Yetkazib berish manzili -->
+            <!-- Izoh -->
             <div class="checkout-form-box">
-              <label class="form-label">Yetkazib berish manzili</label>
-              <div class="delivery-location-box" *ngIf="deliveryLocation">
-                <div class="location-info">
-                  <span class="loc-icon">📍</span>
-                  <span class="loc-address">{{ deliveryLocation.address }}</span>
-                </div>
-                <button type="button" class="change-loc-btn" (click)="openLocationPicker()">
-                  O'zgartirish
-                </button>
-              </div>
-              <button
-                *ngIf="!deliveryLocation"
-                type="button"
-                class="btn btn-outline-primary btn-location"
-                (click)="openLocationPicker()"
-              >
-                <span>📍</span> Xaritadan tanlash
-              </button>
+              <input
+                type="text"
+                class="checkout-note-input"
+                [(ngModel)]="paymentNote"
+                [placeholder]="checkoutMode === 'cash_delivery' ? 'Izoh (ixtiyoriy, masalan: podyezd/qaytim)' : checkoutMode === 'card' ? 'Karta izohi (ixtiyoriy, masalan: karta egasi ismi)' : 'Izoh (ixtiyoriy, masalan: soat 18:00 da boraman)'"
+              />
             </div>
 
             <button 
               class="btn btn-primary btn-lg checkout-btn" 
-              [disabled]="isPlacingOrder"
+              [disabled]="isPlacingOrder || (checkoutMode === 'card' && !selectedReceiptFile)"
               (click)="checkout()"
             >
               <span>🛍️</span>
@@ -267,7 +359,8 @@ interface EnrichedCartItem extends CartItem {
 
           <h3 class="success-title">Buyurtma qabul qilindi!</h3>
           <p class="success-desc">
-            Sizning buyurtmangiz muvaffaqiyatli rasmiylashtirildi va tizimda ro'yxatga olindi. 
+            Sizning buyurtmangiz muvaffaqiyatli rasmiylashtirildi
+            ({{ createdCheckoutMode === 'cash_delivery' ? '💵 Naqd to‘lov: pulni kuryerga topshirasiz' : createdCheckoutMode === 'pickup' ? '🏬 Filialdan borib olish (to‘lov filialda)' : '💳 Karta cheki yuborildi, admin tasdiqlashi kutilmoqda' }}).
             Uni "Mening Buyurtmalarim" bo'limida kuzatib borishingiz mumkin.
           </p>
 
@@ -718,6 +811,136 @@ interface EnrichedCartItem extends CartItem {
     .checkout-form-box {
       margin-bottom: 1.5rem;
     }
+    .pay-method-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      margin-top: 0.5rem;
+    }
+    .pay-method-card {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.7rem 0.75rem;
+      border: 1.5px solid var(--border, #e2e8f0);
+      border-radius: 10px;
+      background: var(--bg-card, #ffffff);
+      color: var(--text-main, #0f172a);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .pay-method-card input {
+      display: none;
+    }
+    .pay-method-card.selected {
+      border-color: var(--primary, #4f46e5);
+      background: rgba(79, 70, 229, 0.08);
+    }
+    .pm-icon {
+      font-size: 1.35rem;
+      line-height: 1;
+    }
+    .pm-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.25;
+    }
+    .pm-text strong {
+      font-size: 0.85rem;
+    }
+    .pm-text small {
+      font-size: 0.72rem;
+      color: var(--text-muted, #64748b);
+    }
+    .cash-notice-box {
+      padding: 0.7rem 0.85rem;
+      border-radius: 8px;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+      font-size: 0.82rem;
+      margin-bottom: 0.65rem;
+    }
+    .card-transfer-box {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 0.65rem;
+    }
+    .card-copy-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.65rem 0.8rem;
+      border-radius: 8px;
+      background: var(--bg-subtle, #f1f5f9);
+      border: 1px solid var(--border, #e2e8f0);
+    }
+    .card-copy-label {
+      font-size: 0.72rem;
+      color: var(--text-muted, #64748b);
+    }
+    .card-copy-num {
+      font-size: 0.9rem;
+      color: var(--text-main, #0f172a);
+    }
+    .copy-btn-sm {
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--border, #cbd5e1);
+      background: var(--bg-card, #ffffff);
+      color: var(--text-main, #0f172a);
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .receipt-upload-label {
+      display: block;
+      padding: 0.75rem;
+      border: 1.5px dashed var(--primary, #4f46e5);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-main, #0f172a);
+      cursor: pointer;
+      background: var(--bg-card, #ffffff);
+    }
+    .receipt-selected-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .receipt-mini-thumb {
+      width: 34px;
+      height: 34px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+    .receipt-file-name {
+      flex: 1;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.82rem;
+    }
+    .remove-receipt-btn {
+      border: none;
+      background: transparent;
+      color: var(--danger, #ef4444);
+      font-weight: 700;
+      cursor: pointer;
+      padding: 0.15rem 0.35rem;
+    }
+    .checkout-note-input {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border, #cbd5e1);
+      border-radius: 8px;
+      font-size: 0.84rem;
+      background: var(--bg-card, #ffffff);
+      color: var(--text-main, #0f172a);
+    }
     .branch-auto-notice {
       display: flex;
       align-items: center;
@@ -1147,6 +1370,7 @@ export class CartViewComponent implements OnInit, OnDestroy {
   private cartService = inject(CartService);
   private productService = inject(ProductService);
   private orderService = inject(OrderService);
+  private paymentService = inject(PaymentService);
   private companyService = inject(CompanyService);
   public authState = inject(AuthStateService);
   private notification = inject(NotificationService);
@@ -1161,6 +1385,13 @@ export class CartViewComponent implements OnInit, OnDestroy {
   updatingProductId: number | null = null;
   isPlacingOrder = false;
   showSuccessModal = false;
+
+  // Checkout to'lov va qabul qilish usuli
+  checkoutMode: 'cash_delivery' | 'card' | 'pickup' = 'cash_delivery';
+  createdCheckoutMode: 'cash_delivery' | 'card' | 'pickup' = 'cash_delivery';
+  selectedReceiptFile: File | null = null;
+  selectedReceiptPreview: string | null = null;
+  paymentNote = '';
 
   // Filial ma'lumotlari
   cartBranches: CompanyBranch[] = [];
@@ -1354,6 +1585,45 @@ export class CartViewComponent implements OnInit, OnDestroy {
     });
   }
 
+  copyCardNumber(num: string): void {
+    navigator.clipboard.writeText(num);
+    this.notification.success('Karta raqami nusxalandi: ' + num);
+  }
+
+  onReceiptFileSelected(event: any): void {
+    const file: File | undefined = event?.target?.files?.[0];
+    if (!file) return;
+
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.pdf'];
+    const lower = file.name.toLowerCase();
+    if (!allowedExt.some(ext => lower.endsWith(ext))) {
+      this.notification.error('Faqat JPG, JPEG, PNG yoki PDF fayl yuklash mumkin.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      this.notification.error('Fayl hajmi 5MB dan oshmasligi kerak!');
+      return;
+    }
+
+    this.selectedReceiptFile = file;
+    if (!lower.endsWith('.pdf')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.selectedReceiptPreview = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      this.selectedReceiptPreview = null;
+    }
+  }
+
+  removeReceiptFile(event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    this.selectedReceiptFile = null;
+    this.selectedReceiptPreview = null;
+  }
+
   checkout(): void {
     if (!this.authState.isAuthenticated()) {
       this.notification.warning("Buyurtmani rasmiylashtirish uchun avval tizimga kiring yoki ro'yxatdan o'ting!");
@@ -1361,17 +1631,86 @@ export class CartViewComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.isPlacingOrder = true;
+    const mode = this.checkoutMode;
+    if (mode === 'card' && !this.selectedReceiptFile) {
+      this.notification.error("Karta orqali to'lov uchun chek rasmini yuklang!");
+      return;
+    }
 
-    this.orderService.createOrder().subscribe({
+    if (mode === 'cash_delivery' && !this.deliveryLocation) {
+      this.notification.warning("Iltimos, xaritadan yetkazib berish manzilini tanlang!");
+      this.openLocationPicker();
+      return;
+    }
+
+    this.isPlacingOrder = true;
+    const payMethod: 'Cash' | 'CardTransfer' = mode === 'card' ? 'CardTransfer' : 'Cash';
+    const userNote = this.paymentNote.trim();
+    const parts: string[] = [];
+    if (mode === 'pickup') {
+      parts.push('Filialdan borib olish (Pickup)');
+    } else if (mode === 'cash_delivery' && this.deliveryLocation?.address) {
+      parts.push(`Manzil: ${this.deliveryLocation.address}`);
+    }
+    if (userNote) {
+      parts.push(userNote);
+    }
+    const note = parts.length > 0 ? parts.join(' | ') : undefined;
+
+    const orderDto: CreateOrderDto | undefined =
+      mode === 'cash_delivery' && this.deliveryLocation
+        ? {
+            deliveryAddress: this.deliveryLocation.address,
+            deliveryLatitude: this.deliveryLocation.latitude,
+            deliveryLongitude: this.deliveryLocation.longitude,
+            ...(userNote ? { deliveryNotes: userNote } : {})
+          }
+        : mode === 'pickup'
+          ? {
+              deliveryAddress: 'Filialdan borib olish (Pickup)',
+              ...(userNote ? { deliveryNotes: userNote } : {})
+            }
+          : userNote
+            ? { deliveryNotes: userNote }
+            : undefined;
+
+    // 1. Agar CardTransfer bo'lsa, avval chek yuklanadi (muvaffaqiyatsiz bo'lsa buyurtma yaratilmaydi)
+    const upload$ = payMethod === 'CardTransfer' && this.selectedReceiptFile
+      ? this.paymentService.uploadReceipt(this.selectedReceiptFile)
+      : of(undefined as string | undefined);
+
+    upload$.pipe(
+      switchMap((chekUrl) =>
+        // TODO: Backend Order/Create to'g'ridan-to'g'ri orderId qaytarsa, getMyOrdersPaged chaqiruvi shart bo'lmaydi
+        this.orderService.createOrder(orderDto).pipe(
+          switchMap(() => this.orderService.getMyOrdersPaged(1, 5)),
+          switchMap((paged) => {
+            const latestOrder = (paged.items || [])[0];
+            if (!latestOrder?.id) {
+              return of(null);
+            }
+            return this.paymentService.createPayment({
+              orderId: latestOrder.id,
+              paymentMethod: payMethod,
+              ...(chekUrl ? { chekUrl } : {}),
+              ...(note ? { transactionNote: note } : {})
+            });
+          })
+        )
+      )
+    ).subscribe({
       next: () => {
         this.isPlacingOrder = false;
+        this.createdCheckoutMode = mode;
+        this.selectedReceiptFile = null;
+        this.selectedReceiptPreview = null;
+        this.paymentNote = '';
         this.cartService.clearLocalCart();
         this.showSuccessModal = true;
       },
       error: (err) => {
         this.isPlacingOrder = false;
-        this.notification.error(err?.message || "Buyurtma berishda xatolik yuz berdi.");
+        this.notification.error(err?.error?.message || err?.message || "Buyurtma berishda xatolik yuz berdi.");
       }
     });
   }

@@ -51,9 +51,11 @@ import { Company } from '../../../core/models/company.model';
               <input
                 type="text"
                 class="filter-input search-input"
+                aria-label="Buyurtma ID yoki mahsulot nomi bo'yicha qidirish"
                 placeholder="Buyurtma #ID yoki mahsulot nomi..."
                 [ngModel]="filter.search || ''"
                 (ngModelChange)="onSearchInput($event)"
+                (keydown.enter)="applySearchImmediate()"
               />
               <button
                 *ngIf="filter.search"
@@ -93,6 +95,22 @@ import { Company } from '../../../core/models/company.model';
               <option [ngValue]="null">Barcha filiallar</option>
               <option *ngFor="let b of branches" [ngValue]="b.id">
                 {{ b.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- 3.1 Kuryer dropdown (Admin / BranchManager uchun) -->
+          <div class="filter-field" *ngIf="showCurierFilter">
+            <label class="field-label">Kuryer:</label>
+            <select
+              class="filter-select"
+              aria-label="Kuryer bo'yicha filtr"
+              [(ngModel)]="filter.curierProfileId"
+              (ngModelChange)="onFilterChanged()"
+            >
+              <option [ngValue]="null">Barcha kuryerlar</option>
+              <option *ngFor="let c of curiers" [ngValue]="c.id">
+                {{ c.name }}
               </option>
             </select>
           </div>
@@ -165,9 +183,13 @@ import { Company } from '../../../core/models/company.model';
               Kompaniya #{{ filter.companyId }}
               <button (click)="filter.companyId = null; onFilterChanged()">×</button>
             </span>
-            <span class="active-tag" *ngIf="filter.paymentStatus">
+            <span class="active-tag" *ngIf="filter.curierProfileId">
+              {{ getCurierLabel(filter.curierProfileId) }}
+              <button type="button" (click)="filter.curierProfileId = null; onFilterChanged()">×</button>
+            </span>
+            <span class="active-tag" *ngIf="filter.paymentStatus && filter.paymentStatus !== 'all'">
               To‘lov: {{ getPaymentStatusLabel(filter.paymentStatus) }}
-              <button (click)="filter.paymentStatus = null; onFilterChanged()">×</button>
+              <button type="button" (click)="filter.paymentStatus = 'all'; onFilterChanged()">×</button>
             </span>
             <span class="active-tag" *ngIf="filter.dateFrom">
               Dan: {{ filter.dateFrom }}
@@ -531,6 +553,7 @@ export class OrderFiltersComponent implements OnInit, OnDestroy {
     search: '',
     branchId: null,
     companyId: null,
+    curierProfileId: null,
     dateFrom: null,
     dateTo: null,
     paymentStatus: 'all',
@@ -541,8 +564,10 @@ export class OrderFiltersComponent implements OnInit, OnDestroy {
 
   @Input() branches: CompanyBranch[] = [];
   @Input() companies: Company[] = [];
+  @Input() curiers: { id: number; name: string }[] = [];
   @Input() showBranchFilter = true;
   @Input() showCompanyFilter = false;
+  @Input() showCurierFilter = false;
 
   @Output() filterChange = new EventEmitter<OrderFilter>();
   @Output() reset = new EventEmitter<void>();
@@ -574,13 +599,20 @@ export class OrderFiltersComponent implements OnInit, OnDestroy {
   }
 
   onSearchInput(value: string): void {
+    this.filter.search = value;
     this.searchSubject.next(value);
+  }
+
+  applySearchImmediate(): void {
+    this.filter.pageNumber = 1;
+    this.filterChange.emit({ ...this.filter });
   }
 
   clearSearch(): void {
     this.filter.search = '';
     this.filter.pageNumber = 1;
     this.searchSubject.next('');
+    this.filterChange.emit({ ...this.filter });
   }
 
   onFilterChanged(): void {
@@ -592,6 +624,7 @@ export class OrderFiltersComponent implements OnInit, OnDestroy {
     this.filter.search = '';
     this.filter.branchId = null;
     this.filter.companyId = null;
+    this.filter.curierProfileId = null;
     this.filter.dateFrom = null;
     this.filter.dateTo = null;
     this.filter.paymentStatus = 'all';
@@ -606,11 +639,18 @@ export class OrderFiltersComponent implements OnInit, OnDestroy {
     if (this.filter.search && this.filter.search.trim()) count++;
     if (this.filter.branchId !== null && this.filter.branchId !== undefined) count++;
     if (this.filter.companyId !== null && this.filter.companyId !== undefined) count++;
+    if (this.filter.curierProfileId !== null && this.filter.curierProfileId !== undefined) count++;
     if (this.filter.dateFrom) count++;
     if (this.filter.dateTo) count++;
     if (this.filter.paymentStatus && this.filter.paymentStatus !== 'all') count++;
     if (this.filter.sortBy && this.filter.sortBy !== 'createdAt_desc') count++;
     return count;
+  }
+
+  getCurierLabel(curierId: number | null | undefined): string {
+    if (!curierId) return '';
+    const c = this.curiers.find(x => Number(x.id) === Number(curierId));
+    return c ? `Kuryer: ${c.name}` : `Kuryer #${curierId}`;
   }
 
   getPaymentStatusLabel(status: OrderPaymentFilter | null): string {

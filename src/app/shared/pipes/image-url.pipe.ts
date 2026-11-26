@@ -13,8 +13,17 @@ export class ImageUrlPipe implements PipeTransform {
       return fallback || this.placeholderUrl;
     }
 
-    // Agar "http" yoki "https" bilan boshlansa - to'liq URL
+    // Agar "http" yoki "https" bilan boshlansa - to'liq URL (HTML/qidiruv sahifalari emasligini tekshirish)
     if (value.startsWith('http://') || value.startsWith('https://')) {
+      const lower = value.toLowerCase();
+      if (
+        lower.includes('share.google') ||
+        lower.includes('pinterest.com/pin/') ||
+        lower.includes('google.com/search') ||
+        lower.includes('google.com/url')
+      ) {
+        return fallback || this.placeholderUrl;
+      }
       return value;
     }
 

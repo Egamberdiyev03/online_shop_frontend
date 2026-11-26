@@ -1,0 +1,212 @@
+<div class="deliveries-page">
+  <div class="header-row">
+    <h1>Mening yetkazmalarim</h1>
+    @if (cashSummary(); as cs) {
+      <div class="cash-mini-pill" [class.has-debt]="cs.debt > 0">
+        💵 Qarz: <strong>{{ formatMoney(cs.debt) }}</strong>
+      </div>
+    }
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    @for (f of statusFilters; track f.value) {
+      <button [class.active]="currentFilter() === f.value" (click)="setFilter(f.value)">
+        {{ f.label }}
+      </button>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="loading">Yuklanmoqda...</div>
+  } @else if (filteredDeliveries.length === 0) {
+    <div class="empty">
+      <span class="icon">📦</span>
+      <p>Yetkazmalar yo'q</p>
+    </div>
+  } @else {
+    <div class="deliveries-list">
+      @for (order of filteredDeliveries; track order.id) {
+        <div
+          class="delivery-card"
+          [attr.id]="'delivery-card-' + order.id"
+          [class.delivery-highlight]="highlightedOrderId() === order.id"
+        >
+          <div class="card-header">
+            <span class="order-id">#{{ order.id }}</span>
+            <app-status-badge [status]="order.status"></app-status-badge>
+          </div>
+
+          <div class="card-body">
+            <div class="price">{{ formatMoney(order.totalPrice) }}</div>
+            <div class="date">{{ order.createdAt | date:'dd.MM.yyyy HH:mm' }}</div>
+            @if (order.payment) {
+              <div class="payment-method" [class.cash-to-collect]="isCashPayment(order) && order.status !== OrderStatus.Delivered">
+                @if (isCashPayment(order)) {
+                  @if (order.status === OrderStatus.Delivered) {
+                    💵 Naqd (tasdiqlanishi kutilmoqda: {{ formatMoney(order.totalPrice) }})
+                  } @else if (order.status === OrderStatus.Cancelled || order.status === OrderStatus.DeliveryFailed) {
+                    💵 Naqd (bekor qilingan)
+                  } @else {
+                    💵 Naqd pul (olinadi: {{ formatMoney(order.totalPrice) }})
+                  }
+                } @else if (order.payment.paymentMethod?.toLowerCase() === 'cash') {
+                  💵 Naqd (to'langan)
+                } @else {
+                  💳 Karta orqali to'langan
+                }
+              </div>
+            }
+            @if (order.deliveryAddress || canOpenRouteMap(order)) {
+              <div class="delivery-address-box">
+                @if (order.deliveryAddress) {
+                  <div><strong>📍 Manzil:</strong> {{ order.deliveryAddress }}</div>
+                }
+                @if (order.deliveryNotes) {
+                  <div class="delivery-notes"><strong>📝 Izoh:</strong> {{ order.deliveryNotes }}</div>
+                }
+                @if (canOpenRouteMap(order)) {
+                  <div class="map-links-row">
+                    <button type="button" class="btn-inapp-map" (click)="openRouteModal(order)">
+                      🗺️ Ilova ichida xarita
+                    </button>
+                    @if (getRouteGoogleMapsUrl(order); as gUrl) {
+                      <a [href]="gUrl" target="_blank" rel="noopener noreferrer" class="btn-gmaps-ext">
+                        🧭 Google Maps ↗
+                      </a>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="card-actions">
+            @if (canPickUp(order)) {
+              <button class="btn-primary" (click)="pickUp(order)"
+                      [disabled]="actionLoading() === order.id">
+                📦 Buyurtmani oldim
+              </button>
+              <button class="btn-secondary" (click)="rejectAssignment(order)"
+                      [disabled]="actionLoading() === order.id">
+                Rad etaman
+              </button>
+            }
+
+            @if (canDeliver(order)) {
+              @if (isCashPayment(order)) {
+                <button class="btn-success" (click)="requestCollectCash(order)"
+                        [disabled]="actionLoading() === order.id">
+                  💵 {{ formatMoney(order.totalPrice) }} oldim — Yetkazildi
+                </button>
+              } @else {
+                <button class="btn-success" (click)="markDelivered(order)"
+                        [disabled]="actionLoading() === order.id">
+                  ✅ Yetkazdim
+                </button>
+              }
+            }
+
+            @if (order.status === OrderStatus.Delivered) {
+              <span class="completed-badge">✅ Yakunlangan</span>
+            }
+
+            @if (order.status === OrderStatus.Cancelled) {
+              <span class="cancelled-badge">❌ Bekor qilingan</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    @if (totalPages() > 1) {
+      <div class="pagination-bar" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 20px;">
+        <button class="btn-secondary" (click)="prevPage()" [disabled]="!hasPreviousPage() || loading()">← Oldingi</button>
+        <span>Sahifa {{ pageNumber() }} / {{ totalPages() }}</span>
+        <button class="btn-secondary" (click)="nextPage()" [disabled]="!hasNextPage() || loading()">Keyingi →</button>
+      </div>
+    }
+  }
+</div>
+
+@if (confirmCashOrder(); as o) {
+  <div class="cash-modal-overlay" (click)="closeConfirmCashModal()">
+    <div class="cash-modal" (click)="$event.stopPropagation()">
+      <h3>💵 Naqd pul qabul qilish</h3>
+      <p>
+        <strong>#{{ o.id }}</strong>-buyurtma uchun mijozdan
+        <strong>{{ formatMoney(o.totalPrice) }}</strong> naqd pul oldingizmi?
+      </p>
+      <p class="cash-modal-note">
+        Tasdiqlasangiz buyurtma "Yetkazildi" deb yopiladi va bu summa sizning kuryer hisobingizga qarz sifatida yoziladi.
+      </p>
+      <div class="cash-modal-actions">
+        <button type="button" class="btn-secondary" (click)="closeConfirmCashModal()" [disabled]="actionLoading() === o.id">
+          Bekor qilish
+        </button>
+        <button type="button" class="btn-success" (click)="collectCashAndDeliver(o)" [disabled]="actionLoading() === o.id">
+          {{ actionLoading() === o.id ? 'Saqlanmoqda...' : 'Ha, pulni oldim' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (routeOrder(); as ro) {
+  <div class="cash-modal-overlay" (click)="closeRouteModal()">
+    <div class="cash-modal route-modal" (click)="$event.stopPropagation()">
+      <div class="route-modal-header">
+        <h3>🗺️ Buyurtma #{{ ro.id }} — Yo'l xaritasi</h3>
+        <button type="button" class="route-close-btn" (click)="closeRouteModal()">&times;</button>
+      </div>
+
+      @if (routeEstimate(); as est) {
+        <div class="route-eta-box">
+          <div class="route-eta-top">
+            <span>⏱️ Taxminiy vaqt: <strong>{{ est.minMinutes }}–{{ est.maxMinutes }} daqiqa</strong></span>
+            <span class="route-dist">📏 {{ est.distanceKm }} km</span>
+          </div>
+          <div class="route-eta-sub">
+            {{ routeLegLabel() }} · {{ est.isRoadRoute ? "ko'chalar bo'yicha" : 'taxminiy masofa' }}
+          </div>
+        </div>
+      }
+
+      <div class="route-points-summary">
+        <div>🏢 <strong>Filial:</strong> {{ getBranchName(ro.companyBranchId) }}@if (getBranchAddress(ro.companyBranchId)) { ({{ getBranchAddress(ro.companyBranchId) }})}</div>
+        @if (ro.deliveryAddress) {
+          <div>🏠 <strong>Mijoz:</strong> {{ ro.deliveryAddress }}</div>
+        }
+        @if (ro.deliveryNotes) {
+          <div class="delivery-notes">📝 {{ ro.deliveryNotes }}</div>
+        }
+      </div>
+
+      <div class="route-legend">
+        <span><i class="dot dot-branch"></i> Filial</span>
+        <span><i class="dot dot-self"></i> Siz</span>
+        <span><i class="dot dot-dest"></i> Mijoz</span>
+      </div>
+
+      <div id="curier-delivery-route-map" class="route-map-canvas"></div>
+
+      @if (!curierLocation.lastCoords() && !myProfile()?.latitude) {
+        <div class="route-gps-hint">
+          ℹ️ Sizning GPS joylashuvingiz aniqlanmadi — yuqoridagi "Joylashuvni yangilash" tugmasini bosing yoki GPS ruxsatini yoqing.
+        </div>
+      }
+
+      <div class="route-modal-footer">
+        <button type="button" class="btn-secondary" (click)="refreshMyGps()" [disabled]="locatingSelf()">
+          {{ locatingSelf() ? 'Aniqlanmoqda...' : '📍 Joylashuvni yangilash' }}
+        </button>
+        @if (getRouteGoogleMapsUrl(ro); as gUrl) {
+          <a [href]="gUrl" target="_blank" rel="noopener noreferrer" class="btn-gmaps-footer">
+            🧭 Google Maps ↗
+          </a>
+        }
+        <button type="button" class="btn-primary" (click)="closeRouteModal()">Yopish</button>
+      </div>
+    </div>
+  </div>
+}

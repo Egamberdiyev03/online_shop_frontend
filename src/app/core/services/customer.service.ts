@@ -13,9 +13,43 @@ export class CustomerService {
   private http = inject(HttpClient);
   private apiUrl = `${environment.apiUrl}/User`;
 
-  getAll(): Observable<Customer[]> {
-    return this.http.get<Customer[] | ResponseModel<Customer[]>>(`${this.apiUrl}/GetAll`).pipe(
-      map(res => unwrapResult(res) || [])
+  getAll(pageSize = 500): Observable<Customer[]> {
+    return this.getAllPaged({ pageNumber: 1, pageSize }).pipe(
+      map(res => res.items || [])
+    );
+  }
+
+  getAllPaged(query: PagedQuery = { pageNumber: 1, pageSize: 500 }): Observable<PagedResult<Customer>> {
+    const params = this.appendPagedParams(new HttpParams(), {
+      pageNumber: query.pageNumber || 1,
+      pageSize: query.pageSize || 500,
+      sortBy: query.sortBy,
+      isDescending: query.isDescending,
+      filters: query.filters
+    });
+
+    return this.http.get<Customer[] | PagedResult<Customer> | ResponseModel<PagedResult<Customer> | Customer[]>>(
+      `${this.apiUrl}/GetAll`,
+      { params }
+    ).pipe(
+      map(res => {
+        const data = unwrapResult(res as any);
+        if (Array.isArray(data)) {
+          return {
+            items: data,
+            totalCount: data.length,
+            pageNumber: query.pageNumber || 1,
+            pageSize: data.length || query.pageSize || 500,
+            totalPages: 1,
+            hasPreviousPage: false,
+            hasNextPage: false
+          };
+        }
+        if (data && Array.isArray((data as PagedResult<Customer>).items)) {
+          return data as PagedResult<Customer>;
+        }
+        return this.emptyPagedResult(query);
+      })
     );
   }
 

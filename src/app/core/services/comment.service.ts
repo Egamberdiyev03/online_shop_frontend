@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Comment, CreateCommentDto, UpdateCommentDto, PagedCommentResult } from '../models/comment.model';
-import { ResponseModel, unwrapResult, isErrorResponse } from '../models/response.model';
+import { ResponseModel, unwrapResult, unwrapOrThrow, isErrorResponse } from '../models/response.model';
 import { PagedResult, PagedQuery } from '../models/payment.model';
 
 @Injectable({
@@ -62,7 +62,9 @@ export class CommentService {
     if (query.isDescending !== undefined) params = params.set('IsDescending', query.isDescending.toString());
     if (query.filters) {
       Object.entries(query.filters).forEach(([key, value]) => {
-        params = params.set(`Filters[${key}]`, value);
+        if (value !== undefined && value !== null && value !== '') {
+          params = params.set(`Filters[${key}]`, String(value));
+        }
       });
     }
     return params;
@@ -71,7 +73,10 @@ export class CommentService {
   private handlePagedResponse(res: any, query: PagedQuery = {}): PagedResult<Comment> {
     const data = unwrapResult(res);
     if (data && data.items) {
-      return data;
+      return {
+        ...data,
+        totalPages: data.totalPages || Math.ceil((data.totalCount || 0) / (data.pageSize || query.pageSize || 12)) || 1
+      };
     }
     return {
       items: [],
@@ -82,6 +87,48 @@ export class CommentService {
       hasPreviousPage: false,
       hasNextPage: false
     };
+  }
+
+  /**
+   * Filial bo'yicha sharhlar (BranchAdmin, BranchManager, CompanyAdmin, SuperAdmin)
+   * Backend: GET Comment/GetByBranch?branchId=&PageNumber=1&PageSize=12&SortBy=&IsDescending=
+   */
+  getByBranchPaged(query: PagedQuery = {}, branchId?: number): Observable<PagedResult<Comment>> {
+    let initial = new HttpParams();
+    if (branchId !== undefined && branchId !== null && branchId > 0) {
+      initial = initial.set('branchId', branchId.toString());
+    }
+    const params = this.buildPagedParams(query, initial);
+
+    return this.http.get<ResponseModel<PagedResult<Comment>>>(`${this.apiUrl}/GetByBranch`, { params }).pipe(
+      map(res => {
+        const data = unwrapOrThrow(res, 'Filial sharhlarini yuklashda xatolik');
+        if (data && data.items) {
+          const pageSize = data.pageSize || query.pageSize || 12;
+          const totalCount = data.totalCount || 0;
+          const totalPages = data.totalPages || (totalCount > 0 ? Math.ceil(totalCount / pageSize) : 0);
+          const pageNumber = data.pageNumber || query.pageNumber || 1;
+          return {
+            ...data,
+            pageNumber,
+            pageSize,
+            totalCount,
+            totalPages,
+            hasPreviousPage: data.hasPreviousPage ?? pageNumber > 1,
+            hasNextPage: data.hasNextPage ?? pageNumber < totalPages
+          };
+        }
+        return {
+          items: [],
+          totalCount: 0,
+          pageNumber: query.pageNumber || 1,
+          pageSize: query.pageSize || 12,
+          totalPages: 0,
+          hasPreviousPage: false,
+          hasNextPage: false
+        };
+      })
+    );
   }
 
   update(dto: UpdateCommentDto): Observable<Comment> {
@@ -96,6 +143,20 @@ export class CommentService {
         const unwrapped = unwrapResult(res);
         return unwrapped === true || unwrapped === null || unwrapped === undefined;
       })
+    );
+  }
+
+  /**
+   * Filial/kompaniya/super admin tomonidan sharhni sabab bilan o'chirish
+   * Backend: DELETE Comment/DeleteByStaff?id=&reason=
+   */
+  deleteByStaff(id: number, reason: string): Observable<boolean> {
+    const params = new HttpParams()
+      .set('id', id.toString())
+      .set('reason', reason.trim());
+
+    return this.http.delete<ResponseModel<boolean>>(`${this.apiUrl}/DeleteByStaff`, { params }).pipe(
+      map(res => unwrapOrThrow(res, "Sharhni o'chirishda xatolik") === true)
     );
   }
 

@@ -149,7 +149,7 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
                 </div>
                 <div class="user-details">
                   <div class="user-name">{{ comment.userName || ('Mijoz #' + comment.userId) }}</div>
-                  <div class="comment-date">{{ comment.createdAt | date:'mediumDate' }}</div>
+                  <div class="comment-date">{{ comment.createdAt | date:'dd.MM.yyyy' }}</div>
                 </div>
                 <div class="comment-stars">
                   <app-star-rating [rating]="comment.starRating"></app-star-rating>
@@ -159,7 +159,7 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
               <p class="comment-content">{{ comment.content }}</p>
 
               <button
-                *ngIf="authState.isAdminMode() || comment.userId === authState.currentCustomerId()"
+                *ngIf="authState.hasAnyRole(['SuperAdmin', 'CompanyAdmin', 'BranchManager']) || authState.isAdminMode() || comment.userId === authState.currentCustomerId()"
                 class="delete-comment-btn"
                 (click)="deleteComment(comment)"
                 title="Sharhni o'chirish"

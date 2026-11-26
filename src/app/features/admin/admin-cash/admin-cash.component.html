@@ -1,0 +1,97 @@
+<div class="admin-cash">
+  <div
+    style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+    <h1 style="margin: 0;">Naqd pul hisobi</h1>
+    @if (authState.isSuperAdmin() && branches().length > 0) {
+    <select [(ngModel)]="selectedBranchFilter" (ngModelChange)="loadData()"
+      style="padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+      <option [value]="0">Barcha filiallar bo'yicha</option>
+      @for (b of branches(); track b.id) {
+      <option [value]="b.id">{{ b.name }}</option>
+      }
+    </select>
+    }
+  </div>
+
+  @if (loading()) {
+  <div class="loading">Yuklanmoqda...</div>
+  } @else if (curiers().length === 0) {
+  <div class="empty">Faol kuryerlar yo'q</div>
+  } @else {
+  <div class="curiers-list">
+    @for (c of curiers(); track c.id) {
+    <div class="curier-card" [class.has-debt]="(c.cashSummary?.debt || 0) > 0">
+      <div class="curier-info">
+        <strong>{{ c.name }}</strong>
+        <span>{{ c.phoneNumber }}</span>
+        <span class="transport">{{ getTransportLabel(c.vehicleType) }}</span>
+      </div>
+
+      <div class="amounts">
+        <div class="amount">
+          <span class="label">Yig'ilgan</span>
+          <span class="value">{{ formatMoney(c.cashSummary?.collected || 0) }}</span>
+        </div>
+        <div class="amount">
+          <span class="label">Topshirilgan</span>
+          <span class="value">{{ formatMoney(c.cashSummary?.handedOver || 0) }}</span>
+        </div>
+        <div class="amount">
+          <span class="label">Qarz</span>
+          <span class="value debt">{{ formatMoney(c.cashSummary?.debt || 0) }}</span>
+        </div>
+      </div>
+
+      @if ((c.cashSummary?.debt || 0) > 0) {
+      <button class="btn-primary" (click)="openModal(c)">
+        Pul qabul qilish
+      </button>
+      }
+    </div>
+    }
+  </div>
+  }
+</div>
+
+<!-- Modal -->
+@if (modalOpen()) {
+<div class="modal-overlay" (click)="closeModal()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <h2>Pul qabul qilish</h2>
+    @if (selectedCurier(); as c) {
+    <p class="curier-name">{{ c.name }}</p>
+    <p class="current-debt">Qarz: {{ formatMoney(c.cashSummary?.debt || 0) }}</p>
+
+    <div class="form-group">
+      <label>Summa</label>
+      <input type="number" [(ngModel)]="handoverAmount" [max]="c.cashSummary?.debt ?? null">
+      @if (handoverAmount > (c.cashSummary?.debt || 0)) {
+      <span class="error">Qarzdan oshmasligi kerak</span>
+      }
+    </div>
+
+    <div class="form-group">
+      <label>Filial</label>
+      <select [(ngModel)]="handoverBranchId">
+        @for (b of branches(); track b.id) {
+        <option [value]="b.id">{{ b.name }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Izoh</label>
+      <textarea [(ngModel)]="handoverNote" rows="2"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" (click)="closeModal()">Bekor qilish</button>
+      <button class="btn-success" (click)="submitHandover()"
+        [disabled]="submitting() || handoverAmount <= 0 || handoverAmount > (c.cashSummary?.debt || 0)">
+        {{ submitting() ? 'Saqlanmoqda...' : 'Qabul qilish' }}
+      </button>
+    </div>
+    }
+  </div>
+</div>
+}

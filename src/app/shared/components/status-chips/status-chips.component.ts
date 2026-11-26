@@ -53,6 +53,19 @@ export interface StatusChipItem {
         </button>
 
         <button
+          *ngIf="counts.assigned > 0 || selectedStatus === OrderStatus.AssignedToCourier"
+          type="button"
+          class="status-chip-btn chip-confirmed"
+          [class.active]="selectedStatus === OrderStatus.AssignedToCourier"
+          [class.is-zero]="counts.assigned === 0"
+          (click)="onSelect(OrderStatus.AssignedToCourier)"
+        >
+          <span class="chip-icon">🛵</span>
+          <span class="chip-label">Kuryerda</span>
+          <span class="chip-badge">({{ counts.assigned }})</span>
+        </button>
+
+        <button
           type="button"
           class="status-chip-btn chip-shipped"
           [class.active]="selectedStatus === OrderStatus.Shipped"
@@ -86,6 +99,19 @@ export interface StatusChipItem {
           <span class="chip-icon">✖️</span>
           <span class="chip-label">Bekor qilingan</span>
           <span class="chip-badge">({{ counts.cancelled }})</span>
+        </button>
+
+        <button
+          *ngIf="counts.failed > 0 || selectedStatus === OrderStatus.DeliveryFailed"
+          type="button"
+          class="status-chip-btn chip-cancelled"
+          [class.active]="selectedStatus === OrderStatus.DeliveryFailed"
+          [class.is-zero]="counts.failed === 0"
+          (click)="onSelect(OrderStatus.DeliveryFailed)"
+        >
+          <span class="chip-icon">⚠️</span>
+          <span class="chip-label">Yetkazilmadi</span>
+          <span class="chip-badge">({{ counts.failed }})</span>
         </button>
       </div>
     </div>
@@ -207,9 +233,11 @@ export class StatusChipsComponent {
     all: 0,
     pending: 0,
     confirmed: 0,
+    assigned: 0,
     shipped: 0,
     delivered: 0,
-    cancelled: 0
+    cancelled: 0,
+    failed: 0
   };
 
   @Output() statusChange = new EventEmitter<OrderStatus | null>();

@@ -1,9 +1,10 @@
 export interface Comment {
   id: number;
-  content: string;
+  content?: string;
   userId: number;
   userName?: string;
   productId: number;
+  productName?: string;
   createdAt: string;
   updatedAt?: string;
   starRating: number;

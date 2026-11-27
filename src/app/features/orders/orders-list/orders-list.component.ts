@@ -398,6 +398,7 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
                   <button
                     *ngIf="canCancel(order.status)"
                     class="btn btn-danger btn-sm cancel-btn"
+                    [disabled]="actionInProgress.has(order.id)"
                     (click)="openCancelModal(order)"
                   >
                     ✕ Buyurtmani bekor qilish
@@ -536,6 +537,7 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
           *ngFor="let order of paginatedOrders"
           [attr.id]="'order-card-' + order.id"
           [class.order-highlight]="highlightedOrderId === order.id"
+          [class.order-mismatch-card]="hasPaymentMismatch(order)"
         >
           <div class="order-header">
             <div class="order-id-block">
@@ -608,6 +610,12 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
 
           <!-- Order Footer & Actions -->
           <div class="order-footer">
+            <!-- Payment vs Status mismatch warning -->
+            <div class="payment-mismatch-warning" *ngIf="getPaymentMismatchMessage(order) as mismatchMsg" role="alert">
+              <span class="mismatch-icon">⚠️</span>
+              <span class="mismatch-text">{{ mismatchMsg }}</span>
+            </div>
+
             <div class="total-wrap">
               <span class="total-label">Jami to'lov:</span>
               <span class="total-amount">{{ order.totalPrice | number:'1.0-0' }} so'm</span>
@@ -620,6 +628,13 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
                   [style.background]="getOrderPaymentBadge(order).bg"
                 >
                   💳 {{ getOrderPaymentBadge(order).label }}
+                </span>
+                <span
+                  class="mismatch-pill"
+                  *ngIf="hasPaymentMismatch(order)"
+                  [title]="getPaymentMismatchMessage(order) || ''"
+                >
+                  ⚠️ Nomuvofiqlik
                 </span>
                 <span 
                   class="rejection-note" 
@@ -645,32 +660,38 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
               >
                 {{ getCurierVehicleIcon(order.curier.vehicleType) }} Kuryer
               </button>
-              <!-- Customer: Pay / Upload Receipt Button (Faqat mijoz uchun, Admin/BranchManager ga ko'rinmaydi) -->
-              <button
-                *ngIf="canCustomerPay(order)"
-                class="btn btn-primary btn-sm pay-btn"
-                (click)="openPayModal(order)"
-              >
-                💳 {{ orderPayments.get(order.id) ? 'Chekni yangilash' : 'To‘lov qilish' }}
-              </button>
 
-              <!-- Admin: Kuryer biriktirish / olib tashlash -->
+              <!-- Admin/Branch staff: Kuryer biriktirish / almashtirish / olib tashlash (faqat olinmagan bo'lsa) -->
               <button
                 *ngIf="canAssignCurier(order)"
+                type="button"
                 class="btn btn-primary btn-sm"
+                [disabled]="actionInProgress.has(order.id)"
                 (click)="openAssignCurierModal(order)"
               >
                 🛵 Kuryer biriktirish
               </button>
               <button
+                *ngIf="canReassignCurier(order)"
+                type="button"
+                class="btn btn-primary btn-sm"
+                [disabled]="actionInProgress.has(order.id)"
+                (click)="openAssignCurierModal(order)"
+              >
+                🔄 Kuryerni almashtirish
+              </button>
+              <button
                 *ngIf="canUnassignCurier(order)"
+                type="button"
                 class="btn btn-secondary btn-sm"
+                [disabled]="actionInProgress.has(order.id)"
                 (click)="unassignCurierFromOrder(order)"
               >
                 ✖ Kuryerni olib tashlash
               </button>
               <button
                 *ngIf="canTrackCurier(order)"
+                type="button"
                 class="btn btn-primary btn-sm"
                 (click)="openTrackCurierModal(order)"
               >
@@ -680,6 +701,7 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
               <!-- View Receipt Button (Chek rasmi bo'lsa barchaga ko'rinadi) -->
               <button
                 *ngIf="orderPayments.get(order.id)?.chekUrl"
+                type="button"
                 class="btn btn-secondary btn-sm"
                 (click)="openViewReceiptModal(order)"
                 title="Chek rasmini ko'rish"
@@ -697,52 +719,106 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
                 🔎 To‘lovni ko‘rish
               </a>
 
-              <!-- Admin/BranchManager: To'lovni tekshirish / qabul qilish -->
+              <!-- Admin/BranchManager: To'lovni ko'rish/tekshirish (faqat Shipped dan oldin) -->
               <button
                 *ngIf="canAdminReviewPayment(order)"
+                type="button"
                 class="btn btn-sm"
                 [ngClass]="getAdminPaymentBtnClass(order)"
+                [disabled]="actionInProgress.has(order.id)"
                 (click)="openAdminPaymentModal(order)"
               >
                 {{ getAdminPaymentBtnLabel(order) }}
               </button>
 
-              <!-- Cancel Button: Opens dedicated modal -->
+              <!-- Bekor qilish (Shipped va undan keyin ko'rsatilmaydi; sabab oynasi bilan) -->
               <button
-                *ngIf="canCancel(order.status)"
+                *ngIf="canStaffCancel(order)"
+                type="button"
                 class="btn btn-danger btn-sm cancel-btn"
+                [disabled]="actionInProgress.has(order.id)"
                 (click)="openCancelModal(order)"
               >
-                ✕ Buyurtmani bekor qilish
+                ✕ Bekor qilish
               </button>
-
-              <!-- Sharh qoldirish tugmasi - faqat yetkazilgan buyurtmalar uchun -->
-              <button
-                *ngIf="canLeaveComment(order)"
-                class="btn btn-success btn-sm comment-btn"
-                (click)="openCommentModal(order)"
-              >
-                ⭐ Sharh qoldirish
-              </button>
-
-              <!-- Admin Status Change Dropdown -->
-              <div class="admin-status-changer" *ngIf="authState.isAdminMode() || authState.isAdminRole()">
-                <label class="status-label" [attr.for]="'status-select-' + order.id">Statusni o'zgartirish:</label>
-                <select 
-                  [attr.id]="'status-select-' + order.id"
-                  aria-label="Buyurtma holatini o'zgartirish"
-                  [ngModel]="order.status" 
-                  (ngModelChange)="updateStatus(order, $event)"
-                  class="form-control status-select"
-                  [disabled]="isOrderFinal(order.status)"
-                >
-                  <option [ngValue]="OrderStatus.Pending" [disabled]="order.status !== OrderStatus.Pending">Kutilmoqda</option>
-                  <option [ngValue]="OrderStatus.Confirmed" [disabled]="!canChangeToConfirmed(order)">{{ getConfirmedOptionLabel(order) }}</option>
-                  <option [ngValue]="OrderStatus.Shipped" [disabled]="!canChangeToShipped(order)">{{ getShippedOptionLabel(order) }}</option>
-                  <option [ngValue]="OrderStatus.Delivered" [disabled]="!canChangeToDelivered(order)">{{ getDeliveredOptionLabel(order) }}</option>
-                </select>
-              </div>
             </div>
+          </div>
+
+          <!-- SuperAdmin uchun alohida kichik "Qo'lda o'zgartirish" menyusi (asosiy qatorda emas) -->
+          <div class="superadmin-override-bar" *ngIf="authState.isSuperAdmin() && canSuperAdminOverride(order)">
+            <div class="superadmin-bar-top">
+              <button
+                type="button"
+                class="override-toggle-btn"
+                [class.active]="overrideMenuOrderId === order.id"
+                [disabled]="actionInProgress.has(order.id)"
+                (click)="toggleOverrideMenu(order); $event.stopPropagation()"
+                title="Statusni qo'lda o'zgartirish (SuperAdmin)"
+              >
+                <span>⚙️ Qo'lda o'zgartirish</span>
+                <span class="override-chevron">{{ overrideMenuOrderId === order.id ? '▲' : '▼' }}</span>
+              </button>
+            </div>
+
+            @if (overrideMenuOrderId === order.id) {
+              <div class="override-panel" (click)="$event.stopPropagation()">
+                <div class="override-panel-grid">
+                  <div class="override-field">
+                    <label class="form-sub-label" [attr.for]="'override-status-' + order.id">Yangi status *</label>
+                    <select
+                      [attr.id]="'override-status-' + order.id"
+                      class="form-control form-control-sm"
+                      [(ngModel)]="overrideNewStatus"
+                      (ngModelChange)="overrideError = false"
+                    >
+                      <option [ngValue]="null" disabled>Statusni tanlang...</option>
+                      <option
+                        *ngFor="let st of overrideStatusOptions"
+                        [ngValue]="st"
+                        [disabled]="parseStatus(order.status) === st"
+                      >
+                        {{ getStatusLabel(st) }}{{ parseStatus(order.status) === st ? ' (joriy)' : '' }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <div class="override-field override-reason-field">
+                    <label class="form-sub-label" [attr.for]="'override-reason-' + order.id">Sabab (majburiy) *</label>
+                    <textarea
+                      [attr.id]="'override-reason-' + order.id"
+                      class="form-control form-control-sm"
+                      [(ngModel)]="overrideReason"
+                      rows="2"
+                      placeholder="Qo'lda o'zgartirish sababini yozing..."
+                      [class.is-invalid]="overrideError && !overrideReason.trim()"
+                      (input)="overrideError = false"
+                    ></textarea>
+                    <div class="text-danger error-hint" *ngIf="overrideError && (overrideNewStatus === null || overrideNewStatus === undefined || !overrideReason.trim())">
+                      {{ (overrideNewStatus === null || overrideNewStatus === undefined) ? 'Yangi statusni tanlang!' : "Qo'lda o'zgartirish sababini kiriting!" }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="override-panel-actions">
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    [disabled]="actionInProgress.has(order.id)"
+                    (click)="closeOverrideMenu()"
+                  >
+                    Bekor
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    [disabled]="actionInProgress.has(order.id)"
+                    (click)="submitOverrideStatus(order)"
+                  >
+                    {{ actionInProgress.has(order.id) ? 'Saqlanmoqda...' : 'Saqlash' }}
+                  </button>
+                </div>
+              </div>
+            }
           </div>
         </div>
       </div>
@@ -1156,11 +1232,13 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
         </div>
       </div>
 
-      <!-- Assign Curier Modal (Admin / BranchManager) -->
+      <!-- Assign / Reassign Curier Modal (Admin / BranchManager) -->
       <div class="modal-overlay" *ngIf="showAssignCurierModal" (click)="closeAssignCurierModal()">
         <div class="modal-content" (click)="$event.stopPropagation()" style="max-width: 460px;">
           <div class="modal-header">
-            <h3 class="modal-title">🛵 Kuryer biriktirish (#{{ orderForAssignCurier?.id }})</h3>
+            <h3 class="modal-title">
+              {{ orderForAssignCurier?.curierProfileId ? '🔄 Kuryerni almashtirish' : '🛵 Kuryer biriktirish' }} (#{{ orderForAssignCurier?.id }})
+            </h3>
             <button class="modal-close" (click)="closeAssignCurierModal()">&times;</button>
           </div>
           <div class="modal-body">
@@ -1176,10 +1254,19 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
                 class="radio-option"
                 style="display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;"
               >
-                <input type="radio" name="selectedCurier" [value]="c.id" [(ngModel)]="selectedCurierId" />
+                <input
+                  type="radio"
+                  name="selectedCurier"
+                  [value]="c.id"
+                  [(ngModel)]="selectedCurierId"
+                  [disabled]="orderForAssignCurier?.curierProfileId === c.id"
+                />
                 <span style="font-size: 1.25rem;">{{ getCurierVehicleIcon(c.vehicleType) }}</span>
                 <div style="flex: 1;">
-                  <div style="font-weight: 600;">{{ c.name }}</div>
+                  <div style="font-weight: 600;">
+                    {{ c.name }}
+                    <span *ngIf="orderForAssignCurier?.curierProfileId === c.id" style="font-size: 0.72rem; color: #64748b; font-weight: 500;">(hozirgi)</span>
+                  </div>
                   <div style="font-size: 0.8rem; color: #64748b;">{{ getCurierVehicleLabel(c.vehicleType) }} • {{ c.phoneNumber }}</div>
                 </div>
                 <span style="font-size: 0.75rem; background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 99px;">Online</span>
@@ -1194,9 +1281,9 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
               type="button"
               class="btn btn-primary btn-sm"
               (click)="confirmAssignCurier()"
-              [disabled]="isAssigningCurier || !selectedCurierId"
+              [disabled]="isAssigningCurier || !selectedCurierId || !!(orderForAssignCurier && actionInProgress.has(orderForAssignCurier.id)) || (orderForAssignCurier?.curierProfileId === selectedCurierId)"
             >
-              {{ isAssigningCurier ? 'Biriktirilmoqda...' : 'Biriktirish' }}
+              {{ isAssigningCurier ? 'Saqlanmoqda...' : (orderForAssignCurier?.curierProfileId ? 'Almashtirish' : 'Biriktirish') }}
             </button>
           </div>
         </div>
@@ -1402,19 +1489,35 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
                 <span>{{ orderToCancel.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
               </div>
             </div>
+            <!-- Staff uchun bekor qilish sababi (majburiy) -->
+            <div class="cancel-reason-box" *ngIf="isStaffOrderView()">
+              <label class="form-sub-label" for="staffCancelReasonInput">Bekor qilish sababi (majburiy) *</label>
+              <textarea
+                id="staffCancelReasonInput"
+                class="form-control form-control-sm"
+                [(ngModel)]="cancelReason"
+                rows="2"
+                placeholder="Masalan: Mijoz bilan bog'lanib bo'lmadi, mahsulot tugadi..."
+                [class.is-invalid]="cancelReasonError && !cancelReason.trim()"
+                (input)="cancelReasonError = false"
+              ></textarea>
+              <div class="text-danger error-hint" *ngIf="cancelReasonError && !cancelReason.trim()">
+                Iltimos, bekor qilish sababini kiriting!
+              </div>
+            </div>
             <p class="cancel-warning-note">
               ⚠️ Bekor qilingach, ushbu buyurtma qayta tiklanmaydi.
             </p>
           </div>
 
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" (click)="closeCancelModal()">
+            <button type="button" class="btn btn-secondary" [disabled]="isCancelling" (click)="closeCancelModal()">
               Yo'q, qolsin
             </button>
             <button 
               type="button" 
               class="btn btn-danger" 
-              [disabled]="isCancelling"
+              [disabled]="isCancelling || !!(orderToCancel && actionInProgress.has(orderToCancel.id))"
               (click)="confirmCancelOrder()"
             >
               {{ isCancelling ? 'Bekor qilinmoqda...' : 'Ha, bekor qilinsin' }}
@@ -1788,92 +1891,24 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
     }
 
     /* Dark theme for new tabs */
-    :host-context(body.dark-theme) .main-tabs,
-    :host-context(.dark-theme) .main-tabs {
-      background: #151e32;
-      border-color: #22304d;
-    }
-    :host-context(body.dark-theme) .main-tab,
-    :host-context(.dark-theme) .main-tab {
-      color: #94a3b8;
-    }
-    :host-context(body.dark-theme) .main-tab:hover,
-    :host-context(.dark-theme) .main-tab:hover {
-      color: #e2e8f0;
-      background: rgba(255, 255, 255, 0.05);
-    }
-    :host-context(body.dark-theme) .main-tab.active,
-    :host-context(.dark-theme) .main-tab.active {
-      background: #1e293b;
-      color: #a5b4fc;
-    }
-
-    :host-context(body.dark-theme) .filter-chip,
-    :host-context(.dark-theme) .filter-chip {
-      background: #151e32;
-      color: #94a3b8;
-      border-color: #22304d;
-    }
-    :host-context(body.dark-theme) .filter-chip:hover,
-    :host-context(.dark-theme) .filter-chip:hover {
-      background: #1e293b;
-      color: #e2e8f0;
-    }
-    :host-context(body.dark-theme) .filter-chip.active,
-    :host-context(.dark-theme) .filter-chip.active {
-      background: #4f46e5;
-      color: #ffffff;
-    }
-
-    :host-context(body.dark-theme) .past-order-row,
-    :host-context(.dark-theme) .past-order-row {
-      background: #151e32;
-      border-color: #22304d;
-    }
-    :host-context(body.dark-theme) .past-order-row:hover,
-    :host-context(.dark-theme) .past-order-row:hover {
-      border-color: #334155;
-    }
-    :host-context(body.dark-theme) .past-order-row.expanded,
-    :host-context(.dark-theme) .past-order-row.expanded {
-      border-color: #6366f1;
-    }
-    :host-context(body.dark-theme) .past-order-row.cancelled,
-    :host-context(.dark-theme) .past-order-row.cancelled {
-      background: #1c1917;
-      border-color: #7f1d1d;
-    }
-    :host-context(body.dark-theme) .past-order-id,
-    :host-context(.dark-theme) .past-order-id {
-      color: #f8fafc;
-    }
-    :host-context(body.dark-theme) .past-order-details,
-    :host-context(.dark-theme) .past-order-details {
-      border-color: #22304d;
-    }
-    :host-context(body.dark-theme) .past-item-row,
-    :host-context(.dark-theme) .past-item-row {
-      color: #cbd5e1;
-      border-color: #1e293b;
-    }
-    :host-context(body.dark-theme) .past-item-sum,
-    :host-context(.dark-theme) .past-item-sum {
-      color: #f8fafc;
-    }
-    :host-context(body.dark-theme) .past-order-footer,
-    :host-context(.dark-theme) .past-order-footer {
-      border-color: #22304d;
-    }
-    :host-context(body.dark-theme) .expand-btn,
-    :host-context(.dark-theme) .expand-btn {
-      background: #1e293b;
-      color: #94a3b8;
-    }
-    :host-context(body.dark-theme) .expand-btn:hover,
-    :host-context(.dark-theme) .expand-btn:hover {
-      background: #334155;
-      color: #e2e8f0;
-    }
+    :host-context(.dark-theme) .main-tabs { background: #151e32; border-color: #22304d; }
+    :host-context(.dark-theme) .main-tab { color: #94a3b8; }
+    :host-context(.dark-theme) .main-tab:hover { color: #e2e8f0; background: rgba(255, 255, 255, 0.05); }
+    :host-context(.dark-theme) .main-tab.active { background: #1e293b; color: #a5b4fc; }
+    :host-context(.dark-theme) .filter-chip { background: #151e32; color: #94a3b8; border-color: #22304d; }
+    :host-context(.dark-theme) .filter-chip:hover { background: #1e293b; color: #e2e8f0; }
+    :host-context(.dark-theme) .filter-chip.active { background: #4f46e5; color: #ffffff; }
+    :host-context(.dark-theme) .past-order-row { background: #151e32; border-color: #22304d; }
+    :host-context(.dark-theme) .past-order-row:hover { border-color: #334155; }
+    :host-context(.dark-theme) .past-order-row.expanded { border-color: #6366f1; }
+    :host-context(.dark-theme) .past-order-row.cancelled { background: #1c1917; border-color: #7f1d1d; }
+    :host-context(.dark-theme) .past-order-id,
+    :host-context(.dark-theme) .past-item-sum { color: #f8fafc; }
+    :host-context(.dark-theme) .past-order-details,
+    :host-context(.dark-theme) .past-order-footer { border-color: #22304d; }
+    :host-context(.dark-theme) .past-item-row { color: #cbd5e1; border-color: #1e293b; }
+    :host-context(.dark-theme) .expand-btn { background: #1e293b; color: #94a3b8; }
+    :host-context(.dark-theme) .expand-btn:hover { background: #334155; color: #e2e8f0; }
 
     /* Mobile responsive */
     @media (max-width: 375px) {
@@ -1909,28 +1944,6 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
       .past-order-main {
         gap: 0.5rem;
       }
-    }
-
-    .filter-bar {
-      display: flex;
-      gap: 1.5rem;
-      padding: 1rem 1.25rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-    }
-    .filter-col {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .filter-label {
-      font-size: 0.825rem;
-      font-weight: 700;
-      color: #334155;
-      white-space: nowrap;
     }
 
     .orders-container {
@@ -2090,21 +2103,132 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
       font-size: 0.825rem;
       border-radius: 8px;
     }
-    .admin-status-changer {
+
+    /* Payment Mismatch Warning */
+    .order-mismatch-card {
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 4px 12px rgba(245, 158, 11, 0.08);
+    }
+    .payment-mismatch-warning {
+      flex-basis: 100%;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-    }
-    .status-label {
-      font-size: 0.75rem;
-      color: #64748b;
+      gap: 0.55rem;
+      padding: 0.6rem 0.9rem;
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 10px;
+      color: #92400e;
+      font-size: 0.8125rem;
       font-weight: 600;
     }
-    .status-select {
-      width: auto;
-      padding: 0.35rem 0.65rem;
-      font-size: 0.8125rem;
-      border-radius: 6px;
+    .mismatch-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .mismatch-text {
+      line-height: 1.4;
+    }
+    .mismatch-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #92400e;
+      background: #fde68a;
+      border: 1px solid #f59e0b;
+    }
+
+    /* SuperAdmin Override Utility Bar (separate from main row) */
+    .superadmin-override-bar {
+      background: #f8fafc;
+      border-top: 1px dashed #cbd5e1;
+      padding: 0.5rem 1.5rem;
+    }
+    .superadmin-bar-top {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .override-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.28rem 0.7rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #475569;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .override-toggle-btn:hover:not(:disabled) {
+      background: #eef2ff;
+      color: #4338ca;
+      border-color: #818cf8;
+    }
+    .override-toggle-btn.active {
+      background: #4f46e5;
+      color: #ffffff;
+      border-color: #4f46e5;
+    }
+    .override-toggle-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .override-chevron {
+      font-size: 0.65rem;
+      opacity: 0.8;
+    }
+    .override-panel {
+      margin-top: 0.65rem;
+      padding: 0.85rem 1rem;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .override-panel-grid {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 0.85rem;
+      align-items: start;
+    }
+    .override-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .override-field textarea.is-invalid,
+    .cancel-reason-box textarea.is-invalid {
+      border-color: #dc2626;
+      background-color: #fffaf0;
+    }
+    .override-panel-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+    .cancel-reason-box {
+      margin: 0.85rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    @media (max-width: 640px) {
+      .override-panel-grid {
+        grid-template-columns: 1fr;
+      }
+      .superadmin-override-bar {
+        padding: 0.5rem 1rem;
+      }
     }
 
     /* Cancel Modal */
@@ -2306,14 +2430,6 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
     }
     .pay-btn:hover {
       background: #4338ca;
-    }
-    .confirm-pay-btn {
-      background: #059669;
-      color: #ffffff;
-      border: none;
-    }
-    .confirm-pay-btn:hover {
-      background: #047857;
     }
 
     /* Pay Modal & Admin Modal common structure */
@@ -3230,20 +3346,19 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
       background: var(--bg-subtle, #f1f5f9);
       border-radius: 8px;
     }
-    :host-context(body.dark-theme) .curier-modal-name,
-    :host-context(.dark-theme) .curier-modal-name {
-      color: #f8fafc;
-    }
-    :host-context(body.dark-theme) .curier-modal-vehicle,
+    :host-context(.dark-theme) .curier-modal-name { color: #f8fafc; }
     :host-context(.dark-theme) .curier-modal-vehicle,
-    :host-context(body.dark-theme) .curier-waiting-note,
-    :host-context(.dark-theme) .curier-waiting-note {
-      color: #cbd5e1;
-    }
-    :host-context(body.dark-theme) .curier-waiting-note,
-    :host-context(.dark-theme) .curier-waiting-note {
-      background: #1e293b;
-    }
+    :host-context(.dark-theme) .curier-waiting-note { color: #cbd5e1; }
+    :host-context(.dark-theme) .curier-waiting-note { background: #1e293b; }
+    :host-context(.dark-theme) .payment-mismatch-warning { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.5); color: #fde68a; }
+    :host-context(.dark-theme) .mismatch-pill { background: rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.55); color: #fde68a; }
+    :host-context(.dark-theme) .superadmin-override-bar { background: #0f172a; border-top-color: #334155; }
+    :host-context(.dark-theme) .override-toggle-btn { background: #1e293b; border-color: #334155; color: #cbd5e1; }
+    :host-context(.dark-theme) .override-toggle-btn:hover:not(:disabled) { background: #312e81; border-color: #6366f1; color: #e0e7ff; }
+    :host-context(.dark-theme) .override-toggle-btn.active { background: #6366f1; border-color: #6366f1; color: #ffffff; }
+    :host-context(.dark-theme) .override-panel { background: #151e32; border-color: #334155; }
+    :host-context(.dark-theme) .override-field textarea.is-invalid,
+    :host-context(.dark-theme) .cancel-reason-box textarea.is-invalid { background-color: #2c1518; border-color: #ef4444; }
   `]
 })
 export class OrdersListComponent implements OnInit, OnDestroy {
@@ -3392,6 +3507,26 @@ export class OrdersListComponent implements OnInit, OnDestroy {
   commentStarRating = 5;
   commentContent = '';
   isSubmittingComment = false;
+
+  // === SuperAdmin Qo'lda o'zgartirish menyusi ===
+  overrideMenuOrderId: number | null = null;
+  overrideNewStatus: OrderStatus | null = null;
+  overrideReason = '';
+  overrideError = false;
+  readonly overrideStatusOptions: OrderStatus[] = [
+    OrderStatus.Pending,
+    OrderStatus.Confirmed,
+    OrderStatus.AssignedToCourier,
+    OrderStatus.Shipped,
+    OrderStatus.Delivered,
+    OrderStatus.Cancelled,
+    OrderStatus.DeliveryFailed
+  ];
+
+  // === Double-click himoyasi va bekor qilish sababi ===
+  actionInProgress = new Set<number>();
+  cancelReason = '';
+  cancelReasonError = false;
 
   // === NEW TAB SYSTEM STATE (Faol / Eski) ===
   readonly ORDERS_PAGE_SIZE = 10;
@@ -3701,6 +3836,7 @@ export class OrdersListComponent implements OnInit, OnDestroy {
 
   setViewMode(mode: 'my' | 'all'): void {
     this.viewMode = mode;
+    this.closeOverrideMenu();
     this.loadOrders();
   }
 
@@ -4005,6 +4141,7 @@ export class OrdersListComponent implements OnInit, OnDestroy {
   }
 
   onFilterReset(): void {
+    this.closeOverrideMenu();
     this.orderFilter = {
       status: null,
       search: null,
@@ -4171,9 +4308,9 @@ export class OrdersListComponent implements OnInit, OnDestroy {
   }
 
   canAdminReviewPayment(order: Order): boolean {
-    const isAdmin = this.authState.isAdminRole() || this.authState.isAdminMode() || this.viewMode === 'all';
-    if (!isAdmin) return false;
-    if (order.status === OrderStatus.Cancelled) return false;
+    if (!this.isStaffOrderView()) return false;
+    // Jo'natildi / Yetkazildi / Bekor / Yetkazilmadi holatlarida faqat ko'rish rejimi
+    if (!this.isBeforeShipped(order.status)) return false;
     const payment = this.getPayment(order.id);
     // Naqd (Cash) to'lovlarni kuryer yig'adi, admin chek tasdiqlash/rad etish tugmalari yashiriladi
     if (payment && payment.paymentMethod === 'Cash') return false;
@@ -4183,7 +4320,7 @@ export class OrdersListComponent implements OnInit, OnDestroy {
   getAdminPaymentBtnLabel(order: Order): string {
     const payment = this.getPayment(order.id);
     if (!payment) {
-      return '💵 To‘lovni qabul qilish';
+      return this.isOrderPending(order) ? '💵 To‘lovni qabul qilish' : '🔎 To‘lovni ko‘rish';
     }
     const pStatus = parsePaymentStatus(payment.status);
     if (pStatus === PaymentStatus.Pending) {
@@ -4463,9 +4600,12 @@ export class OrdersListComponent implements OnInit, OnDestroy {
   }
 
   confirmApprovePayment(): void {
-    if (!this.adminReviewPayment) return;
+    if (!this.adminReviewPayment || this.isAdminProcessingPayment) return;
+    const orderId = this.adminReviewPayment.orderId || this.adminReviewOrder?.id;
+    if (orderId && this.actionInProgress.has(orderId)) return;
 
     this.isAdminProcessingPayment = true;
+    if (orderId) this.actionInProgress.add(orderId);
     const paymentId = this.adminReviewPayment.id;
     const adminId = this.authState.currentUser()?.userId || this.authState.currentCustomerId() || 1;
 
@@ -4473,21 +4613,23 @@ export class OrdersListComponent implements OnInit, OnDestroy {
       next: (updatedPayment) => {
         this.isAdminProcessingPayment = false;
         this.orderPayments.set(updatedPayment.orderId, updatedPayment);
-        if (this.adminReviewOrder) {
-          this.adminReviewOrder.status = OrderStatus.Confirmed;
-        }
         this.notification.success('To‘lov muvaffaqiyatli tasdiqlandi! Buyurtma holati yangilandi.');
         this.closeAdminPaymentModal();
+        const targetId = orderId || updatedPayment.orderId;
+        this.reloadOrder(targetId, () => this.actionInProgress.delete(targetId));
       },
       error: (err) => {
         this.isAdminProcessingPayment = false;
-        this.notification.error(err?.error?.message || err?.message || 'To‘lovni tasdiqlashda xatolik yuz berdi.');
+        if (orderId) this.actionInProgress.delete(orderId);
+        this.notification.error(this.extractErrorMessage(err, 'To‘lovni tasdiqlashda xatolik yuz berdi.'));
       }
     });
   }
 
   confirmRejectPayment(): void {
-    if (!this.adminReviewPayment) return;
+    if (!this.adminReviewPayment || this.isAdminProcessingPayment) return;
+    const orderId = this.adminReviewPayment.orderId || this.adminReviewOrder?.id;
+    if (orderId && this.actionInProgress.has(orderId)) return;
 
     if (!this.adminRejectReason || !this.adminRejectReason.trim()) {
       this.rejectReasonHasError = true;
@@ -4502,6 +4644,7 @@ export class OrdersListComponent implements OnInit, OnDestroy {
 
     this.rejectReasonHasError = false;
     this.isAdminProcessingPayment = true;
+    if (orderId) this.actionInProgress.add(orderId);
     const paymentId = this.adminReviewPayment.id;
     const adminId = this.authState.currentUser()?.userId || this.authState.currentCustomerId() || 1;
 
@@ -4514,18 +4657,24 @@ export class OrdersListComponent implements OnInit, OnDestroy {
         this.orderPayments.set(updatedPayment.orderId, updatedPayment);
         this.notification.warning('To‘lov rad etildi.');
         this.closeAdminPaymentModal();
+        const targetId = orderId || updatedPayment.orderId;
+        this.reloadOrder(targetId, () => this.actionInProgress.delete(targetId));
       },
       error: (err) => {
         this.isAdminProcessingPayment = false;
-        this.notification.error(err?.error?.message || err?.message || 'To‘lovni rad etishda xatolik yuz berdi.');
+        if (orderId) this.actionInProgress.delete(orderId);
+        this.notification.error(this.extractErrorMessage(err, 'To‘lovni rad etishda xatolik yuz berdi.'));
       }
     });
   }
 
   confirmCashOrDirectPayment(): void {
-    if (!this.adminReviewOrder) return;
-    this.isAdminProcessingPayment = true;
+    if (!this.adminReviewOrder || this.isAdminProcessingPayment) return;
     const order = this.adminReviewOrder;
+    if (this.actionInProgress.has(order.id)) return;
+
+    this.isAdminProcessingPayment = true;
+    this.actionInProgress.add(order.id);
     const adminId = this.authState.currentUser()?.userId || this.authState.currentCustomerId() || 1;
 
     this.paymentService.createPayment({
@@ -4538,19 +4687,21 @@ export class OrdersListComponent implements OnInit, OnDestroy {
           next: (confirmedPayment) => {
             this.isAdminProcessingPayment = false;
             this.orderPayments.set(order.id, confirmedPayment);
-            order.status = OrderStatus.Confirmed;
             this.notification.success(`Buyurtma #${order.id} uchun to‘lov qabul qilindi va tasdiqlandi!`);
             this.closeAdminPaymentModal();
+            this.reloadOrder(order.id, () => this.actionInProgress.delete(order.id));
           },
           error: (err) => {
             this.isAdminProcessingPayment = false;
-            this.notification.error(err?.error?.message || err?.message || 'To‘lovni tasdiqlashda xatolik yuz berdi.');
+            this.actionInProgress.delete(order.id);
+            this.notification.error(this.extractErrorMessage(err, 'To‘lovni tasdiqlashda xatolik yuz berdi.'));
           }
         });
       },
       error: (err) => {
         this.isAdminProcessingPayment = false;
-        this.notification.error(err?.error?.message || err?.message || 'To‘lov yaratishda xatolik yuz berdi.');
+        this.actionInProgress.delete(order.id);
+        this.notification.error(this.extractErrorMessage(err, 'To‘lov yaratishda xatolik yuz berdi.'));
       }
     });
   }
@@ -4574,22 +4725,42 @@ export class OrdersListComponent implements OnInit, OnDestroy {
   }
 
   canCancel(status: OrderStatus | number): boolean {
-    return status === OrderStatus.Pending || status === OrderStatus.Confirmed || status === OrderStatus.AssignedToCourier;
+    const s = parseOrderStatus(status);
+    return s === OrderStatus.Pending || s === OrderStatus.Confirmed || s === OrderStatus.AssignedToCourier;
+  }
+
+  isStaffOrderView(): boolean {
+    return (this.authState.isAdminRole() || this.authState.isAdminMode()) && this.viewMode === 'all';
+  }
+
+  isBeforeShipped(status: any): boolean {
+    const s = parseOrderStatus(status);
+    return s === OrderStatus.Pending || s === OrderStatus.Confirmed || s === OrderStatus.AssignedToCourier;
+  }
+
+  canStaffCancel(order: Order): boolean {
+    if (!this.isStaffOrderView()) return false;
+    return this.isBeforeShipped(order.status);
   }
 
   canAssignCurier(order: Order): boolean {
-    const isAdmin = this.authState.isAdminRole() || this.authState.isAdminMode();
-    if (!isAdmin || order.curierProfileId) return false;
-    return order.status === OrderStatus.Pending || order.status === OrderStatus.Confirmed;
+    if (!this.isStaffOrderView() || order.curierProfileId) return false;
+    const s = parseOrderStatus(order.status);
+    return s === OrderStatus.Pending || s === OrderStatus.Confirmed;
+  }
+
+  canReassignCurier(order: Order): boolean {
+    if (!this.isStaffOrderView() || !order.curierProfileId) return false;
+    return this.isBeforeShipped(order.status);
   }
 
   canUnassignCurier(order: Order): boolean {
-    const isAdmin = this.authState.isAdminRole() || this.authState.isAdminMode();
-    if (!isAdmin || !order.curierProfileId) return false;
-    return order.status === OrderStatus.Pending || order.status === OrderStatus.Confirmed || order.status === OrderStatus.AssignedToCourier;
+    if (!this.isStaffOrderView() || !order.curierProfileId) return false;
+    return this.isBeforeShipped(order.status);
   }
 
   openAssignCurierModal(order: Order): void {
+    if (this.actionInProgress.has(order.id)) return;
     this.orderForAssignCurier = order;
     this.selectedCurierId = 0;
     this.showAssignCurierModal = true;
@@ -4615,31 +4786,47 @@ export class OrdersListComponent implements OnInit, OnDestroy {
 
   confirmAssignCurier(): void {
     if (!this.orderForAssignCurier || !this.selectedCurierId || this.isAssigningCurier) return;
+    const orderId = this.orderForAssignCurier.id;
+    if (this.actionInProgress.has(orderId)) return;
+
+    const newCurierId = Number(this.selectedCurierId);
+    if (this.orderForAssignCurier.curierProfileId === newCurierId) {
+      this.notification.warning('Bu kuryer allaqachon ushbu buyurtmaga biriktirilgan.');
+      return;
+    }
+
+    const wasReassign = !!this.orderForAssignCurier.curierProfileId;
     this.isAssigningCurier = true;
+    this.actionInProgress.add(orderId);
+
     this.orderService.assignCurier({
-      orderId: this.orderForAssignCurier.id,
-      curierProfileId: Number(this.selectedCurierId)
+      orderId,
+      curierProfileId: newCurierId
     }).subscribe({
       next: () => {
-        this.notification.success('Kuryer buyurtmaga biriktirildi');
+        this.notification.success(wasReassign ? 'Kuryer muvaffaqiyatli almashtirildi' : 'Kuryer buyurtmaga biriktirildi');
         this.closeAssignCurierModal();
-        this.loadOrders();
+        this.reloadOrder(orderId, () => this.actionInProgress.delete(orderId));
       },
       error: (err) => {
-        this.notification.error(err?.error?.message || err?.message || 'Kuryer biriktirishda xatolik');
+        this.actionInProgress.delete(orderId);
         this.isAssigningCurier = false;
+        this.notification.error(this.extractErrorMessage(err, 'Kuryer biriktirishda xatolik'));
       }
     });
   }
 
   unassignCurierFromOrder(order: Order): void {
+    if (this.actionInProgress.has(order.id)) return;
+    this.actionInProgress.add(order.id);
     this.orderService.unassignCurier(order.id).subscribe({
       next: () => {
         this.notification.info('Kuryer buyurtmadan olib tashlandi');
-        this.loadOrders();
+        this.reloadOrder(order.id, () => this.actionInProgress.delete(order.id));
       },
       error: (err) => {
-        this.notification.error(err?.error?.message || err?.message || 'Xatolik yuz berdi');
+        this.actionInProgress.delete(order.id);
+        this.notification.error(this.extractErrorMessage(err, 'Kuryerni olib tashlashda xatolik yuz berdi'));
       }
     });
   }
@@ -5028,33 +5215,51 @@ export class OrdersListComponent implements OnInit, OnDestroy {
   }
 
   openCancelModal(order: Order): void {
+    if (this.actionInProgress.has(order.id)) return;
     this.orderToCancel = order;
+    this.cancelReason = '';
+    this.cancelReasonError = false;
     this.showCancelModal = true;
   }
 
   closeCancelModal(): void {
     this.showCancelModal = false;
     this.orderToCancel = null;
+    this.cancelReason = '';
+    this.cancelReasonError = false;
   }
 
   confirmCancelOrder(): void {
-    if (!this.orderToCancel) return;
-
-    this.isCancelling = true;
+    if (!this.orderToCancel || this.isCancelling) return;
     const orderId = this.orderToCancel.id;
+    if (this.actionInProgress.has(orderId)) return;
+
+    const reason = this.cancelReason.trim();
+    if (this.isStaffOrderView() && !reason) {
+      this.cancelReasonError = true;
+      this.notification.error("Iltimos, bekor qilish sababini kiriting!");
+      return;
+    }
+
+    this.cancelReasonError = false;
+    this.isCancelling = true;
+    this.actionInProgress.add(orderId);
 
     this.orderService.cancelOrder(orderId).subscribe({
       next: () => {
         this.isCancelling = false;
-        this.notification.success(`#${orderId}-buyurtma muvaffaqiyatli bekor qilindi.`);
-        const found = this.orders.find(o => o.id === orderId);
-        if (found) {
-          found.status = OrderStatus.Cancelled;
-        }
+        this.notification.success(
+          reason
+            ? `#${orderId}-buyurtma bekor qilindi. Sabab: ${reason}`
+            : `#${orderId}-buyurtma muvaffaqiyatli bekor qilindi.`
+        );
         this.closeCancelModal();
+        this.reloadOrder(orderId, () => this.actionInProgress.delete(orderId));
       },
-      error: () => {
+      error: (err) => {
         this.isCancelling = false;
+        this.actionInProgress.delete(orderId);
+        this.notification.error(this.extractErrorMessage(err, 'Buyurtmani bekor qilishda xatolik yuz berdi.'));
       }
     });
   }
@@ -5133,102 +5338,174 @@ export class OrdersListComponent implements OnInit, OnDestroy {
 
   // ========================================
 
+  parseStatus(status: any): OrderStatus {
+    return parseOrderStatus(status);
+  }
+
   isOrderFinal(status: any): boolean {
     const s = parseOrderStatus(status);
     return s === OrderStatus.Delivered || s === OrderStatus.Cancelled;
   }
 
-  canChangeToConfirmed(order: Order): boolean {
-    const s = parseOrderStatus(order.status);
-    if (s === OrderStatus.Confirmed) return true;
-    if (s !== OrderStatus.Pending) return false;
-    const payment = this.getPayment(order.id);
-    return !!payment && this.isPaymentCompleted(payment);
+  getStatusLabel(status: any): string {
+    const s = parseOrderStatus(status);
+    const labels: Record<number, string> = {
+      [OrderStatus.Pending]: 'Kutilmoqda',
+      [OrderStatus.Confirmed]: 'Tasdiqlangan',
+      [OrderStatus.AssignedToCourier]: 'Kuryerga biriktirilgan',
+      [OrderStatus.Shipped]: "Jo'natildi",
+      [OrderStatus.Delivered]: 'Yetkazildi',
+      [OrderStatus.Cancelled]: 'Bekor qilindi',
+      [OrderStatus.DeliveryFailed]: "Yetkazib bo'lmadi"
+    };
+    return labels[s] || "Noma'lum";
   }
 
-  getConfirmedOptionLabel(order: Order): string {
+  hasPaymentMismatch(order: Order): boolean {
+    return !!this.getPaymentMismatchMessage(order);
+  }
+
+  getPaymentMismatchMessage(order: Order): string | null {
     const s = parseOrderStatus(order.status);
-    if (s === OrderStatus.Pending) {
-      const payment = this.getPayment(order.id);
-      if (!payment || !this.isPaymentCompleted(payment)) {
-        return "Tasdiqlangan (To‘lov kutilmoqda)";
+    const payment = this.getPayment(order.id) || (order.payment ? this.paymentService.normalizePayment(order.payment) : undefined);
+    const ps = payment ? parsePaymentStatus(payment.status) : null;
+    const statusLabel = this.getStatusLabel(order.status);
+    const payLabel = payment ? this.getPaymentBadge(payment.status).label : "To'lov qilinmagan";
+
+    // Yetkazildi, lekin to'lov tasdiqlanmagan
+    if (s === OrderStatus.Delivered) {
+      if (!payment || ps !== PaymentStatus.Completed) {
+        return `Nomuvofiqlik: Buyurtma "${statusLabel}", lekin to'lov "${payLabel}"!`;
       }
+      return null;
     }
-    return 'Tasdiqlangan';
-  }
 
-  canChangeToShipped(order: Order): boolean {
-    const s = parseOrderStatus(order.status);
-    if (s === OrderStatus.Shipped) return true;
-    if (s !== OrderStatus.Confirmed) return false;
-    const payment = this.getPayment(order.id);
-    return !!payment && this.isPaymentCompleted(payment);
-  }
-
-  getShippedOptionLabel(order: Order): string {
-    const s = parseOrderStatus(order.status);
-    if (s === OrderStatus.Pending) {
-      return "Jo‘natildi (Avval to‘lov kerak)";
+    // Jo'natildi, lekin to'lov rad etilgan/bekor/qaytarilgan yoki naqdsiz to'lov hali tasdiqlanmagan
+    if (s === OrderStatus.Shipped) {
+      if (ps === PaymentStatus.Failed || ps === PaymentStatus.Cancelled || ps === PaymentStatus.Refunded) {
+        return `Nomuvofiqlik: Buyurtma "${statusLabel}", lekin to'lov "${payLabel}"!`;
+      }
+      if ((!payment || ps === PaymentStatus.Pending) && payment?.paymentMethod !== 'Cash') {
+        return `Nomuvofiqlik: Buyurtma "${statusLabel}", lekin to'lov "${payLabel}"!`;
+      }
+      return null;
     }
-    return "Jo‘natildi";
-  }
 
-  canChangeToDelivered(order: Order): boolean {
-    const s = parseOrderStatus(order.status);
-    if (s === OrderStatus.Delivered) return true;
-    if (s !== OrderStatus.Shipped && s !== OrderStatus.Confirmed) return false;
-    const payment = this.getPayment(order.id);
-    return !!payment && this.isPaymentCompleted(payment);
-  }
-
-  getDeliveredOptionLabel(order: Order): string {
-    const s = parseOrderStatus(order.status);
-    if (s === OrderStatus.Pending) {
-      return "Yetkazildi (Avval to‘lov kerak)";
+    // Bekor qilindi / Yetkazilmadi, lekin to'lov hali Tasdiqlangan
+    if (s === OrderStatus.Cancelled || s === OrderStatus.DeliveryFailed) {
+      if (ps === PaymentStatus.Completed) {
+        return `Nomuvofiqlik: Buyurtma "${statusLabel}", lekin to'lov hali "${payLabel}"!`;
+      }
+      return null;
     }
-    return 'Yetkazildi';
+
+    // Tasdiqlangan / Kuryerda, lekin to'lov rad etilgan / bekor / qaytarilgan
+    if (s === OrderStatus.Confirmed || s === OrderStatus.AssignedToCourier) {
+      if (ps === PaymentStatus.Failed || ps === PaymentStatus.Cancelled || ps === PaymentStatus.Refunded) {
+        return `Nomuvofiqlik: Buyurtma "${statusLabel}", lekin to'lov "${payLabel}"!`;
+      }
+      return null;
+    }
+
+    // Kutilmoqda, lekin to'lov allaqachon Tasdiqlangan
+    if (s === OrderStatus.Pending && ps === PaymentStatus.Completed) {
+      return `Nomuvofiqlik: To'lov "${payLabel}", lekin buyurtma hali "${statusLabel}" holatida!`;
+    }
+
+    return null;
   }
 
-  updateStatus(order: Order, newStatus: any): void {
-    const parsedNew = parseOrderStatus(newStatus);
-    const parsedCurrent = parseOrderStatus(order.status);
+  canSuperAdminOverride(order: Order): boolean {
+    return this.authState.isSuperAdmin() && !this.isOrderFinal(order.status);
+  }
 
-    if (parsedNew === parsedCurrent) return;
+  toggleOverrideMenu(order: Order): void {
+    if (this.overrideMenuOrderId === order.id) {
+      this.closeOverrideMenu();
+    } else {
+      this.overrideMenuOrderId = order.id;
+      this.overrideNewStatus = null;
+      this.overrideReason = '';
+      this.overrideError = false;
+    }
+  }
 
-    if (this.isOrderFinal(parsedCurrent)) {
-      this.notification.warning("Ushbu buyurtma yakunlangan yoki bekor qilingan, statusini o'zgartirib bo'lmaydi.");
+  closeOverrideMenu(): void {
+    this.overrideMenuOrderId = null;
+    this.overrideNewStatus = null;
+    this.overrideReason = '';
+    this.overrideError = false;
+  }
+
+  submitOverrideStatus(order: Order): void {
+    if (this.actionInProgress.has(order.id)) return;
+
+    if (this.overrideNewStatus === null || this.overrideNewStatus === undefined) {
+      this.overrideError = true;
+      this.notification.error("Iltimos, yangi statusni tanlang!");
       return;
     }
 
-    if (parsedNew === OrderStatus.Shipped || parsedNew === OrderStatus.Delivered) {
-      const payment = this.getPayment(order.id);
-      if (!payment || !this.isPaymentCompleted(payment)) {
-        this.notification.warning("To‘lov hali tasdiqlanmagan! Avval 'To‘lovni tekshirish' orqali to‘lovni tasdiqlang.");
-        return;
-      }
-      if (parsedCurrent === OrderStatus.Pending) {
-        this.notification.warning("Buyurtma hali tasdiqlanmagan! Avval to‘lovni tasdiqlang.");
-        return;
-      }
+    const reason = this.overrideReason.trim();
+    if (!reason) {
+      this.overrideError = true;
+      this.notification.error("Qo'lda o'zgartirish uchun sabab kiritish majburiy!");
+      return;
     }
 
-    if (parsedNew === OrderStatus.Confirmed) {
-      const payment = this.getPayment(order.id);
-      if (payment && !this.isPaymentCompleted(payment)) {
-        this.notification.info("Iltimos, to‘lovni 'To‘lovni tekshirish' tugmasi orqali tekshirib tasdiqlang.");
-        this.openAdminPaymentModal(order);
-        return;
-      }
+    const newStatus = parseOrderStatus(this.overrideNewStatus);
+    if (newStatus === parseOrderStatus(order.status)) {
+      this.overrideError = true;
+      this.notification.warning("Buyurtma allaqachon tanlangan statusda.");
+      return;
     }
 
-    this.orderService.updateStatus(order.id, parsedNew).subscribe({
+    this.overrideError = false;
+    this.actionInProgress.add(order.id);
+
+    this.orderService.updateStatus(order.id, newStatus).subscribe({
       next: () => {
-        order.status = parsedNew;
-        this.notification.success(`#${order.id}-buyurtma holati yangilandi.`);
+        this.notification.success(`#${order.id} statusi "${this.getStatusLabel(newStatus)}" ga o'zgartirildi. Sabab: ${reason}`);
+        this.closeOverrideMenu();
+        this.reloadOrder(order.id, () => this.actionInProgress.delete(order.id));
       },
       error: (err) => {
-        this.notification.error(err?.error?.message || 'Statusni yangilashda xatolik yuz berdi.');
+        this.actionInProgress.delete(order.id);
+        this.notification.error(this.extractErrorMessage(err, "Statusni qo'lda o'zgartirishda xatolik yuz berdi."));
       }
     });
+  }
+
+  private reloadOrder(orderId: number, onDone?: () => void): void {
+    this.orderService.getById(orderId).subscribe({
+      next: (freshOrder) => {
+        if (!freshOrder) {
+          onDone?.();
+          this.loadOrders();
+          return;
+        }
+        const replaceItem = (list: Order[]) => list.map(o => (o.id === orderId ? freshOrder : o));
+        this.allOrders = replaceItem(this.allOrders);
+        this.orders = replaceItem(this.orders);
+        if (freshOrder.payment) {
+          this.orderPayments.set(orderId, this.paymentService.normalizePayment(freshOrder.payment));
+        }
+        this.statusCounts = this.orderService.computeStatusCounts(this.allOrders);
+        if (this.viewMode === 'my') {
+          this.splitOrdersByType(false);
+        } else {
+          this.applyFilters(false);
+        }
+        onDone?.();
+      },
+      error: () => {
+        onDone?.();
+        this.loadOrders();
+      }
+    });
+  }
+
+  private extractErrorMessage(err: any, fallback: string): string {
+    return err?.error?.message || err?.message || fallback;
   }
 }

@@ -1,28 +1,66 @@
 <div class="deliveries-page">
-  <div class="header-row">
-    <h1>Mening yetkazmalarim</h1>
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <div class="header-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="3" width="15" height="13"></rect>
+          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+          <circle cx="5.5" cy="18.5" r="2.5"></circle>
+          <circle cx="18.5" cy="18.5" r="2.5"></circle>
+        </svg>
+      </div>
+      <h1>Mening yetkazmalarim</h1>
+    </div>
+
     @if (cashSummary(); as cs) {
-      <div class="cash-mini-pill" [class.has-debt]="cs.debt > 0">
-        💵 Qarz: <strong>{{ formatMoney(cs.debt) }}</strong>
+      <div class="cash-summary-pill" [class.has-debt]="cs.debt > 0">
+        <div class="cash-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+            <line x1="1" y1="10" x2="23" y2="10"></line>
+          </svg>
+        </div>
+        <div class="cash-info">
+          <span class="cash-label">Qarz</span>
+          <span class="cash-value">{{ formatMoney(cs.debt) }}</span>
+        </div>
       </div>
     }
   </div>
 
   <!-- Filters -->
-  <div class="filters">
-    @for (f of statusFilters; track f.value) {
-      <button [class.active]="currentFilter() === f.value" (click)="setFilter(f.value)">
-        {{ f.label }}
-      </button>
-    }
+  <div class="filters-section">
+    <div class="filters-scroll">
+      @for (f of statusFilters; track f.value) {
+        <button
+          class="filter-btn"
+          [class.active]="currentFilter() === f.value"
+          (click)="setFilter(f.value)"
+        >
+          {{ f.label }}
+        </button>
+      }
+    </div>
   </div>
 
+  <!-- Content -->
   @if (loading()) {
-    <div class="loading">Yuklanmoqda...</div>
+    <div class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>Yuklanmoqda...</p>
+    </div>
   } @else if (filteredDeliveries.length === 0) {
-    <div class="empty">
-      <span class="icon">📦</span>
-      <p>Yetkazmalar yo'q</p>
+    <div class="empty-state">
+      <div class="empty-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+      </div>
+      <h3>Yetkazmalar yo'q</h3>
+      <p>Hozircha sizga tayinlangan yetkazmalar mavjud emas</p>
     </div>
   } @else {
     <div class="deliveries-list">
@@ -32,47 +70,93 @@
           [attr.id]="'delivery-card-' + order.id"
           [class.delivery-highlight]="highlightedOrderId() === order.id"
         >
+          <!-- Card Header -->
           <div class="card-header">
-            <span class="order-id">#{{ order.id }}</span>
+            <div class="order-info">
+              <span class="order-id">#{{ order.id }}</span>
+              <span class="order-date">{{ order.createdAt | date:'dd.MM.yyyy HH:mm' }}</span>
+            </div>
             <app-status-badge [status]="order.status"></app-status-badge>
           </div>
 
+          <!-- Card Body -->
           <div class="card-body">
-            <div class="price">{{ formatMoney(order.totalPrice) }}</div>
-            <div class="date">{{ order.createdAt | date:'dd.MM.yyyy HH:mm' }}</div>
-            @if (order.payment) {
-              <div class="payment-method" [class.cash-to-collect]="isCashPayment(order) && order.status !== OrderStatus.Delivered">
+            <!-- Price Row -->
+            <div class="price-row">
+              <span class="price-amount">{{ formatMoney(order.totalPrice) }}</span>
+
+              @if (order.payment) {
                 @if (isCashPayment(order)) {
                   @if (order.status === OrderStatus.Delivered) {
-                    💵 Naqd (tasdiqlanishi kutilmoqda: {{ formatMoney(order.totalPrice) }})
+                    <span class="payment-badge cash">
+                      <span class="payment-icon">💵</span>
+                      Tasdiqlash kutilmoqda
+                    </span>
                   } @else if (order.status === OrderStatus.Cancelled || order.status === OrderStatus.DeliveryFailed) {
-                    💵 Naqd (bekor qilingan)
+                    <span class="payment-badge cash">
+                      <span class="payment-icon">💵</span>
+                      Bekor qilingan
+                    </span>
                   } @else {
-                    💵 Naqd pul (olinadi: {{ formatMoney(order.totalPrice) }})
+                    <span class="payment-badge cash-pending">
+                      <span class="payment-icon">💵</span>
+                      Naqd olish
+                    </span>
                   }
                 } @else if (order.payment.paymentMethod?.toLowerCase() === 'cash') {
-                  💵 Naqd (to'langan)
+                  <span class="payment-badge cash">
+                    <span class="payment-icon">💵</span>
+                    To'langan
+                  </span>
                 } @else {
-                  💳 Karta orqali to'langan
+                  <span class="payment-badge card-paid">
+                    <span class="payment-icon">💳</span>
+                    Karta orqali
+                  </span>
                 }
-              </div>
-            }
+              }
+            </div>
+
+            <!-- Address Box -->
             @if (order.deliveryAddress || canOpenRouteMap(order)) {
-              <div class="delivery-address-box">
+              <div class="address-box">
                 @if (order.deliveryAddress) {
-                  <div><strong>📍 Manzil:</strong> {{ order.deliveryAddress }}</div>
+                  <div class="address-row">
+                    <div class="address-icon">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                      </svg>
+                    </div>
+                    <div class="address-content">
+                      <span class="address-label">Yetkazish manzili</span>
+                      <span class="address-text">{{ order.deliveryAddress }}</span>
+                    </div>
+                  </div>
                 }
+
                 @if (order.deliveryNotes) {
-                  <div class="delivery-notes"><strong>📝 Izoh:</strong> {{ order.deliveryNotes }}</div>
+                  <div class="delivery-notes">
+                    <strong>Izoh:</strong> {{ order.deliveryNotes }}
+                  </div>
                 }
+
                 @if (canOpenRouteMap(order)) {
-                  <div class="map-links-row">
-                    <button type="button" class="btn-inapp-map" (click)="openRouteModal(order)">
-                      🗺️ Ilova ichida xarita
+                  <div class="map-buttons">
+                    <button type="button" class="btn-map inapp" (click)="openRouteModal(order)">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+                      </svg>
+                      Xaritada ko'rish
                     </button>
                     @if (getRouteGoogleMapsUrl(order); as gUrl) {
-                      <a [href]="gUrl" target="_blank" rel="noopener noreferrer" class="btn-gmaps-ext">
-                        🧭 Google Maps ↗
+                      <a [href]="gUrl" target="_blank" rel="noopener noreferrer" class="btn-map external">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                          <polyline points="15 3 21 3 21 9"></polyline>
+                          <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                        Google Maps
                       </a>
                     }
                   </div>
@@ -81,90 +165,156 @@
             }
           </div>
 
+          <!-- Card Actions -->
           <div class="card-actions">
             @if (canPickUp(order)) {
-              <button class="btn-primary" (click)="pickUp(order)"
-                      [disabled]="actionLoading() === order.id">
-                📦 Buyurtmani oldim
+              <button class="btn btn-primary" (click)="pickUp(order)" [disabled]="actionLoading() === order.id">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Buyurtmani oldim
               </button>
-              <button class="btn-secondary" (click)="rejectAssignment(order)"
-                      [disabled]="actionLoading() === order.id">
+              <button class="btn btn-secondary" (click)="rejectAssignment(order)" [disabled]="actionLoading() === order.id">
                 Rad etaman
               </button>
             }
 
             @if (canDeliver(order)) {
               @if (isCashPayment(order)) {
-                <button class="btn-success" (click)="requestCollectCash(order)"
-                        [disabled]="actionLoading() === order.id">
-                  💵 {{ formatMoney(order.totalPrice) }} oldim — Yetkazildi
+                <button class="btn btn-cash-collect" (click)="requestCollectCash(order)" [disabled]="actionLoading() === order.id">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                  </svg>
+                  {{ formatMoney(order.totalPrice) }} oldim — Yetkazildi
                 </button>
               } @else {
-                <button class="btn-success" (click)="markDelivered(order)"
-                        [disabled]="actionLoading() === order.id">
-                  ✅ Yetkazdim
+                <button class="btn btn-success" (click)="markDelivered(order)" [disabled]="actionLoading() === order.id">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  Yetkazdim
                 </button>
               }
             }
 
             @if (order.status === OrderStatus.Delivered) {
-              <span class="completed-badge">✅ Yakunlangan</span>
+              <div class="status-badge-wrapper">
+                <span class="completed-badge">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                  </svg>
+                  Yakunlangan
+                </span>
+              </div>
             }
 
             @if (order.status === OrderStatus.Cancelled) {
-              <span class="cancelled-badge">❌ Bekor qilingan</span>
+              <div class="status-badge-wrapper">
+                <span class="cancelled-badge">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                  </svg>
+                  Bekor qilingan
+                </span>
+              </div>
             }
           </div>
         </div>
       }
     </div>
 
+    <!-- Pagination -->
     @if (totalPages() > 1) {
-      <div class="pagination-bar" style="display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 20px;">
-        <button class="btn-secondary" (click)="prevPage()" [disabled]="!hasPreviousPage() || loading()">← Oldingi</button>
-        <span>Sahifa {{ pageNumber() }} / {{ totalPages() }}</span>
-        <button class="btn-secondary" (click)="nextPage()" [disabled]="!hasNextPage() || loading()">Keyingi →</button>
+      <div class="pagination-bar">
+        <button class="btn-page" (click)="prevPage()" [disabled]="!hasPreviousPage() || loading()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+          Oldingi
+        </button>
+        <span class="page-info">Sahifa <strong>{{ pageNumber() }}</strong> / <strong>{{ totalPages() }}</strong></span>
+        <button class="btn-page" (click)="nextPage()" [disabled]="!hasNextPage() || loading()">
+          Keyingi
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
       </div>
     }
   }
 </div>
 
+<!-- Cash Confirm Modal -->
 @if (confirmCashOrder(); as o) {
-  <div class="cash-modal-overlay" (click)="closeConfirmCashModal()">
+  <div class="modal-overlay" (click)="closeConfirmCashModal()">
     <div class="cash-modal" (click)="$event.stopPropagation()">
-      <h3>💵 Naqd pul qabul qilish</h3>
-      <p>
-        <strong>#{{ o.id }}</strong>-buyurtma uchun mijozdan
-        <strong>{{ formatMoney(o.totalPrice) }}</strong> naqd pul oldingizmi?
-      </p>
-      <p class="cash-modal-note">
-        Tasdiqlasangiz buyurtma "Yetkazildi" deb yopiladi va bu summa sizning kuryer hisobingizga qarz sifatida yoziladi.
-      </p>
+      <div class="cash-modal-header">
+        <div class="cash-modal-icon">💵</div>
+        <h3>Naqd pul qabul qilish</h3>
+      </div>
+
+      <div class="cash-modal-body">
+        <div class="cash-amount-box">
+          <span class="cash-amount">{{ formatMoney(o.totalPrice) }}</span>
+        </div>
+
+        <p class="cash-modal-info">
+          <strong>#{{ o.id }}</strong>-buyurtma uchun mijozdan yuqoridagi summani naqd pul oldingizmi?
+        </p>
+
+        <div class="cash-modal-note">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <span>Tasdiqlasangiz buyurtma "Yetkazildi" deb yopiladi va bu summa sizning kuryer hisobingizga qarz sifatida yoziladi.</span>
+        </div>
+      </div>
+
       <div class="cash-modal-actions">
-        <button type="button" class="btn-secondary" (click)="closeConfirmCashModal()" [disabled]="actionLoading() === o.id">
+        <button type="button" class="btn btn-secondary" (click)="closeConfirmCashModal()" [disabled]="actionLoading() === o.id">
           Bekor qilish
         </button>
-        <button type="button" class="btn-success" (click)="collectCashAndDeliver(o)" [disabled]="actionLoading() === o.id">
-          {{ actionLoading() === o.id ? 'Saqlanmoqda...' : 'Ha, pulni oldim' }}
+        <button type="button" class="btn btn-success" (click)="collectCashAndDeliver(o)" [disabled]="actionLoading() === o.id">
+          @if (actionLoading() === o.id) {
+            <span class="spinner"></span>
+            Saqlanmoqda...
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Ha, pulni oldim
+          }
         </button>
       </div>
     </div>
   </div>
 }
 
+<!-- Route Modal -->
 @if (routeOrder(); as ro) {
-  <div class="cash-modal-overlay" (click)="closeRouteModal()">
+  <div class="modal-overlay" (click)="closeRouteModal()">
     <div class="cash-modal route-modal" (click)="$event.stopPropagation()">
       <div class="route-modal-header">
-        <h3>🗺️ Buyurtma #{{ ro.id }} — Yo'l xaritasi</h3>
-        <button type="button" class="route-close-btn" (click)="closeRouteModal()">&times;</button>
+        <h3>Buyurtma #{{ ro.id }} — Yo'l xaritasi</h3>
+        <button type="button" class="route-close-btn" (click)="closeRouteModal()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
 
       @if (routeEstimate(); as est) {
         <div class="route-eta-box">
           <div class="route-eta-top">
-            <span>⏱️ Taxminiy vaqt: <strong>{{ est.minMinutes }}–{{ est.maxMinutes }} daqiqa</strong></span>
-            <span class="route-dist">📏 {{ est.distanceKm }} km</span>
+            <span>Taxminiy vaqt: <strong>{{ est.minMinutes }}–{{ est.maxMinutes }} daqiqa</strong></span>
+            <span class="route-dist">{{ est.distanceKm }} km</span>
           </div>
           <div class="route-eta-sub">
             {{ routeLegLabel() }} · {{ est.isRoadRoute ? "ko'chalar bo'yicha" : 'taxminiy masofa' }}
@@ -173,12 +323,27 @@
       }
 
       <div class="route-points-summary">
-        <div>🏢 <strong>Filial:</strong> {{ getBranchName(ro.companyBranchId) }}@if (getBranchAddress(ro.companyBranchId)) { ({{ getBranchAddress(ro.companyBranchId) }})}</div>
+        <div class="route-point">
+          <div class="route-point-icon branch">🏢</div>
+          <div>
+            <strong>Filial:</strong> {{ getBranchName(ro.companyBranchId) }}
+            @if (getBranchAddress(ro.companyBranchId)) {
+              <br><small>{{ getBranchAddress(ro.companyBranchId) }}</small>
+            }
+          </div>
+        </div>
         @if (ro.deliveryAddress) {
-          <div>🏠 <strong>Mijoz:</strong> {{ ro.deliveryAddress }}</div>
+          <div class="route-point">
+            <div class="route-point-icon customer">🏠</div>
+            <div>
+              <strong>Mijoz:</strong> {{ ro.deliveryAddress }}
+            </div>
+          </div>
         }
         @if (ro.deliveryNotes) {
-          <div class="delivery-notes">📝 {{ ro.deliveryNotes }}</div>
+          <div class="delivery-notes">
+            <strong>Izoh:</strong> {{ ro.deliveryNotes }}
+          </div>
         }
       </div>
 
@@ -192,20 +357,39 @@
 
       @if (!curierLocation.lastCoords() && !myProfile()?.latitude) {
         <div class="route-gps-hint">
-          ℹ️ Sizning GPS joylashuvingiz aniqlanmadi — yuqoridagi "Joylashuvni yangilash" tugmasini bosing yoki GPS ruxsatini yoqing.
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <span>Sizning GPS joylashuvingiz aniqlanmadi — quyidagi "Joylashuvni yangilash" tugmasini bosing yoki GPS ruxsatini yoqing.</span>
         </div>
       }
 
       <div class="route-modal-footer">
-        <button type="button" class="btn-secondary" (click)="refreshMyGps()" [disabled]="locatingSelf()">
-          {{ locatingSelf() ? 'Aniqlanmoqda...' : '📍 Joylashuvni yangilash' }}
+        <button type="button" class="btn btn-secondary" (click)="refreshMyGps()" [disabled]="locatingSelf()">
+          @if (locatingSelf()) {
+            <span class="spinner"></span>
+            Aniqlanmoqda...
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="10" r="3"></circle>
+              <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 6.9 8 11.7z"></path>
+            </svg>
+            Joylashuvni yangilash
+          }
         </button>
         @if (getRouteGoogleMapsUrl(ro); as gUrl) {
           <a [href]="gUrl" target="_blank" rel="noopener noreferrer" class="btn-gmaps-footer">
-            🧭 Google Maps ↗
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            Google Maps
           </a>
         }
-        <button type="button" class="btn-primary" (click)="closeRouteModal()">Yopish</button>
+        <button type="button" class="btn btn-primary" (click)="closeRouteModal()">Yopish</button>
       </div>
     </div>
   </div>

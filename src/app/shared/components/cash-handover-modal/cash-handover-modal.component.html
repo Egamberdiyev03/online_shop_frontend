@@ -1,0 +1,138 @@
+@if (isOpen && curier) {
+  <div class="modal-overlay" (click)="onClose()">
+    <div class="modal-container" (click)="$event.stopPropagation()">
+      <!-- Header -->
+      <div class="modal-header">
+        <div class="header-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+            <line x1="1" y1="10" x2="23" y2="10"></line>
+          </svg>
+        </div>
+        <h2>Pul qabul qilish</h2>
+        <button type="button" class="close-btn" (click)="onClose()" aria-label="Yopish">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Curier Info -->
+      <div class="curier-section">
+        <div class="curier-avatar">
+          <span>{{ getInitials(curier.name) }}</span>
+        </div>
+        <div class="curier-details">
+          <h3>{{ curier.name }}</h3>
+          <p>{{ curier.phoneNumber }} &middot; {{ getTransportLabel(curier.vehicleType) }}</p>
+        </div>
+      </div>
+
+      <!-- Debt Summary -->
+      <div class="debt-summary">
+        <div class="debt-item">
+          <span class="label">Yig'ilgan</span>
+          <span class="value collected">{{ curier.cashSummary?.collected | uzsCurrency }}</span>
+        </div>
+        <div class="debt-divider">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <div class="debt-item">
+          <span class="label">Topshirilgan</span>
+          <span class="value">{{ curier.cashSummary?.handedOver | uzsCurrency }}</span>
+        </div>
+        <div class="debt-divider">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <div class="debt-item total">
+          <span class="label">Qarz</span>
+          <span class="value debt">{{ curier.cashSummary?.debt | uzsCurrency }}</span>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <div class="form-section">
+        <!-- Amount -->
+        <div class="form-group">
+          <label>Qabul qilinadigan summa</label>
+          <div class="amount-input-wrapper">
+            <input
+              type="number"
+              [(ngModel)]="amount"
+              [max]="maxAmount"
+              min="0"
+              class="amount-input"
+              [class.error]="amount > maxAmount"
+            />
+            <span class="currency-suffix">so'm</span>
+          </div>
+          @if (amount > maxAmount) {
+            <span class="error-text">Summa qarzdan oshmasligi kerak</span>
+          }
+          <div class="quick-amounts">
+            <button type="button" (click)="setFullAmount()" [class.active]="amount === maxAmount">
+              To'liq summa
+            </button>
+            <button type="button" (click)="setHalfAmount()" [class.active]="amount === halfAmount">
+              Yarmi
+            </button>
+          </div>
+        </div>
+
+        <!-- Branch -->
+        <div class="form-group">
+          <label>Filial</label>
+          <div class="select-wrapper">
+            <select [(ngModel)]="branchId">
+              @for (branch of branches; track branch.id) {
+                <option [value]="branch.id">{{ branch.name }}</option>
+              }
+            </select>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Note -->
+        <div class="form-group">
+          <label>Izoh <span class="optional">(ixtiyoriy)</span></label>
+          <textarea
+            [(ngModel)]="note"
+            rows="2"
+            placeholder="Qo'shimcha ma'lumot..."
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="onClose()">
+          Bekor qilish
+        </button>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="submit()"
+          [disabled]="!canSubmit"
+        >
+          @if (submitting()) {
+            <span class="spinner"></span>
+            Saqlanmoqda...
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Qabul qilish
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}

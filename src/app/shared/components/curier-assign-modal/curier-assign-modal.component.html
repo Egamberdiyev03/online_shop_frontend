@@ -1,0 +1,150 @@
+@if (isOpen) {
+  <div class="modal-overlay" (click)="onClose()">
+    <div class="modal-container" (click)="$event.stopPropagation()">
+      <!-- Header -->
+      <div class="modal-header">
+        <div class="header-content">
+          <h2>Kuryer biriktirish</h2>
+          <p class="order-id">Buyurtma #{{ orderId }}</p>
+        </div>
+        <button type="button" class="close-btn" (click)="onClose()" aria-label="Yopish">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Current Curier -->
+      @if (currentCurier) {
+        <div class="current-curier">
+          <div class="current-label">
+            <span class="dot"></span>
+            Hozirgi kuryer
+          </div>
+          <div class="current-info">
+            <div class="avatar">
+              @if (currentCurier.profilePictureUrl) {
+                <img [src]="currentCurier.profilePictureUrl | imageUrl" [alt]="currentCurier.name" />
+              } @else {
+                <span>{{ getInitials(currentCurier.name) }}</span>
+              }
+            </div>
+            <div class="info">
+              <strong>{{ currentCurier.name }}</strong>
+              <span>{{ getTransportIcon(currentCurier.vehicleType) }} {{ getTransportLabel(currentCurier.vehicleType) }}</span>
+            </div>
+            <button type="button" class="unassign-btn" (click)="unassign()" [disabled]="submitting()">
+              @if (submitting()) {
+                <span class="spinner"></span>
+              } @else {
+                Olib tashlash
+              }
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- Search & Filter -->
+      <div class="search-section">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="text"
+            [(ngModel)]="searchQuery"
+            placeholder="Ism yoki telefon bo'yicha qidirish..."
+          />
+        </div>
+        <label class="filter-toggle">
+          <input type="checkbox" [(ngModel)]="filterOnline" />
+          <span class="toggle-label">
+            <span class="online-dot"></span>
+            Faqat online ({{ onlineCuriersCount }})
+          </span>
+        </label>
+      </div>
+
+      <!-- Curiers List -->
+      <div class="curiers-list">
+        @if (loading()) {
+          <div class="loading-state">
+            <span class="spinner large"></span>
+            <p>Yuklanmoqda...</p>
+          </div>
+        } @else if (filteredCuriers.length === 0) {
+          <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M16 16s-1.5-2-4-2-4 2-4 2"></path>
+              <line x1="9" y1="9" x2="9.01" y2="9"></line>
+              <line x1="15" y1="9" x2="15.01" y2="9"></line>
+            </svg>
+            <p>Kuryer topilmadi</p>
+            @if (filterOnline) {
+              <button type="button" class="show-all-btn" (click)="filterOnline = false">
+                Barcha kuryerlarni ko'rsatish
+              </button>
+            }
+          </div>
+        } @else {
+          @for (curier of filteredCuriers; track curier.id) {
+            <div
+              class="curier-item"
+              [class.selected]="selectedCurierId === curier.id"
+              [class.offline]="!curier.isOnline"
+              (click)="selectCurier(curier.id)"
+            >
+              <div class="curier-avatar">
+                @if (curier.profilePictureUrl) {
+                  <img [src]="curier.profilePictureUrl | imageUrl" [alt]="curier.name" />
+                } @else {
+                  <span>{{ getInitials(curier.name) }}</span>
+                }
+                <span class="status-dot" [class.online]="curier.isOnline"></span>
+              </div>
+
+              <div class="curier-info">
+                <div class="curier-name">{{ curier.name }}</div>
+                <div class="curier-meta">
+                  <span class="transport">{{ getTransportIcon(curier.vehicleType) }} {{ getTransportLabel(curier.vehicleType) }}</span>
+                  <span class="phone">{{ curier.phoneNumber }}</span>
+                </div>
+              </div>
+
+              <div class="select-indicator">
+                @if (selectedCurierId === curier.id) {
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                }
+              </div>
+            </div>
+          }
+        }
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="onClose()">
+          Bekor qilish
+        </button>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="assign()"
+          [disabled]="!selectedCurierId || submitting()"
+        >
+          @if (submitting()) {
+            <span class="spinner"></span>
+            Biriktirilmoqda...
+          } @else {
+            Biriktirish
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}

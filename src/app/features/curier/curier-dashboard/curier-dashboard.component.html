@@ -1,72 +1,171 @@
 <div class="curier-dashboard">
   @if (loading()) {
-    <div class="loading">Yuklanmoqda...</div>
+    <div class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>Yuklanmoqda...</p>
+    </div>
   } @else {
     @if (profile(); as p) {
-    <!-- Online Toggle -->
-    <div class="online-section">
-      <div class="online-toggle" [class.online]="p.isOnline">
-        <button (click)="toggleOnline()" [disabled]="togglingOnline()">
-          <span class="status-dot"></span>
-          <span>{{ p.isOnline ? 'Online' : 'Offline' }}</span>
+    <!-- Header with Online Toggle -->
+    <div class="dashboard-header">
+      <div class="status-section">
+        <button
+          class="online-toggle-btn"
+          [class.online]="p.isOnline"
+          [class.toggling]="togglingOnline()"
+          (click)="toggleOnline()"
+          [disabled]="togglingOnline()"
+        >
+          <div class="toggle-track">
+            <div class="toggle-thumb">
+              @if (togglingOnline()) {
+                <span class="mini-spinner"></span>
+              } @else {
+                <span class="status-icon">{{ p.isOnline ? '✓' : '' }}</span>
+              }
+            </div>
+          </div>
+          <div class="toggle-text">
+            <span class="status-label">{{ p.isOnline ? 'Online' : 'Offline' }}</span>
+            <span class="status-hint">{{ p.isOnline ? 'Buyurtmalar qabul qilinmoqda' : "Buyurtmalar qabul qilinmaydi" }}</span>
+          </div>
         </button>
       </div>
+
       @if (!p.isActive) {
-        <div class="inactive-warning">
-          Akkauntingiz hali faollashtirilmagan
+        <div class="inactive-banner">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span>Akkauntingiz hali faollashtirilmagan. Admin tasdig'ini kuting.</span>
         </div>
       }
     </div>
 
     <!-- Profile Card -->
     <div class="profile-card">
-      <div class="avatar">
+      <div class="profile-avatar">
         @if (p.profilePictureUrl && !avatarBroken()) {
           <img [src]="p.profilePictureUrl | imageUrl" alt="Profil" (error)="avatarBroken.set(true)">
         } @else {
-          <span>{{ getInitials(p.name) }}</span>
+          <span class="initials">{{ getInitials(p.name) }}</span>
         }
+        <div class="avatar-badge" [class.online]="p.isOnline"></div>
       </div>
-      <div class="info">
-        <h2>{{ p.name }}</h2>
-        <p class="transport">{{ getTransportLabel(p.vehicleType) }}</p>
-        <p class="phone">{{ p.phoneNumber }}</p>
+      <div class="profile-info">
+        <h2 class="profile-name">{{ p.name }}</h2>
+        <div class="profile-meta">
+          <span class="transport-badge">
+            <span class="transport-icon">{{ getTransportEmoji(p.vehicleType) }}</span>
+            {{ getTransportLabel(p.vehicleType) }}
+          </span>
+        </div>
+        <a [href]="'tel:' + p.phoneNumber" class="profile-phone">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          {{ p.phoneNumber }}
+        </a>
       </div>
     </div>
 
-    <!-- Cash Summary -->
+    <!-- Cash Summary Card -->
     @if (cashSummary(); as cs) {
       <div class="cash-card" [class.has-debt]="cs.debt > 0">
-        <h3>Naqd pul hisobi</h3>
-        <div class="amounts">
-          <div class="amount">
-            <span class="label">Yig'ilgan</span>
-            <span class="value success">{{ formatMoney(cs.collected) }}</span>
+        <div class="cash-header">
+          <div class="cash-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+              <line x1="1" y1="10" x2="23" y2="10"></line>
+            </svg>
           </div>
-          <div class="amount">
-            <span class="label">Topshirilgan</span>
-            <span class="value">{{ formatMoney(cs.handedOver) }}</span>
+          <h3>Naqd pul hisobi</h3>
+        </div>
+
+        <div class="cash-grid">
+          <div class="cash-item">
+            <span class="cash-label">Yig'ilgan</span>
+            <span class="cash-value collected">{{ formatMoney(cs.collected) }}</span>
           </div>
-          <div class="amount">
-            <span class="label">Qarz</span>
-            <span class="value" [class.debt]="cs.debt > 0">{{ formatMoney(cs.debt) }}</span>
+          <div class="cash-item">
+            <span class="cash-label">Topshirilgan</span>
+            <span class="cash-value handed">{{ formatMoney(cs.handedOver) }}</span>
+          </div>
+          <div class="cash-item total">
+            <span class="cash-label">Qarz</span>
+            <span class="cash-value" [class.debt]="cs.debt > 0">{{ formatMoney(cs.debt) }}</span>
           </div>
         </div>
+
         @if (cs.debt > 0) {
-          <p class="debt-warning">Smena oxirida filialga topshiring</p>
+          <div class="debt-alert">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>Smena oxirida filialga topshiring</span>
+          </div>
         }
       </div>
     }
 
-    <!-- Quick Links -->
-    <div class="quick-links">
-      <a routerLink="/curier/deliveries" class="link-card">
-        <span class="icon">📦</span>
-        <span>Mening yetkazmalarim</span>
+    <!-- Location Status -->
+    @if (curierLocation.isTracking()) {
+      <div class="location-card">
+        <div class="location-status">
+          <div class="location-icon pulsing">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+          </div>
+          <div class="location-info">
+            <span class="location-title">Joylashuv kuzatilmoqda</span>
+            @if (curierLocation.lastSentAt()) {
+              <span class="location-time">Oxirgi yangilanish: {{ curierLocation.lastSentAt() | date:'HH:mm:ss' }}</span>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+      <a routerLink="/curier/deliveries" class="action-card primary">
+        <div class="action-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="3" width="15" height="13"></rect>
+            <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+            <circle cx="5.5" cy="18.5" r="2.5"></circle>
+            <circle cx="18.5" cy="18.5" r="2.5"></circle>
+          </svg>
+        </div>
+        <div class="action-content">
+          <span class="action-title">Mening yetkazmalarim</span>
+          <span class="action-hint">Buyurtmalarni ko'rish va boshqarish</span>
+        </div>
+        <svg class="action-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
       </a>
-      <button type="button" class="link-card" (click)="testSound()" style="cursor: pointer; width: 100%; text-align: left;">
-        <span class="icon">🔔</span>
-        <span>Buyurtma ovozini yoqish / tekshirish</span>
+
+      <button type="button" class="action-card" (click)="testSound()">
+        <div class="action-icon sound">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 1 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+        </div>
+        <div class="action-content">
+          <span class="action-title">Ovozni tekshirish</span>
+          <span class="action-hint">Bildirishnoma ovozini sinab ko'ring</span>
+        </div>
+        <svg class="action-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
       </button>
     </div>
     }

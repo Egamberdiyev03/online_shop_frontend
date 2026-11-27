@@ -8,6 +8,7 @@ import { CompanyService } from '../../../core/services/company.service';
 import { AuthStateService } from '../../../core/services/auth-state.service';
 import { CurierResponseDto, CurierCashSummaryDto, TransportTypeLabels } from '../../../core/models/curier.model';
 import { CompanyBranch } from '../../../core/models/company-branch.model';
+import { CashHandoverModalComponent } from '../../../shared/components/cash-handover-modal/cash-handover-modal.component';
 
 interface CurierWithDebt extends CurierResponseDto {
   cashSummary?: CurierCashSummaryDto;
@@ -16,7 +17,7 @@ interface CurierWithDebt extends CurierResponseDto {
 @Component({
   selector: 'app-admin-cash',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, CashHandoverModalComponent],
   templateUrl: './admin-cash.component.html',
   styleUrl: './admin-cash.component.css'
 })
@@ -35,10 +36,6 @@ export class AdminCashComponent implements OnInit {
   // Modal
   modalOpen = signal(false);
   selectedCurier = signal<CurierWithDebt | null>(null);
-  handoverAmount = 0;
-  handoverBranchId = 0;
-  handoverNote = '';
-  submitting = signal(false);
 
   ngOnInit(): void {
     if (this.authState.isBranchManager() && this.authState.userBranchId()) {
@@ -104,9 +101,6 @@ export class AdminCashComponent implements OnInit {
 
   openModal(curier: CurierWithDebt): void {
     this.selectedCurier.set(curier);
-    this.handoverAmount = curier.cashSummary?.debt || 0;
-    this.handoverBranchId = this.branches()[0]?.id || 0;
-    this.handoverNote = '';
     this.modalOpen.set(true);
   }
 
@@ -115,45 +109,28 @@ export class AdminCashComponent implements OnInit {
     this.selectedCurier.set(null);
   }
 
-  submitHandover(): void {
-    const curier = this.selectedCurier();
-    if (!curier || this.submitting()) return;
-
-    if (this.handoverAmount <= 0) {
-      this.notification.warning('Summa 0 dan katta bo\'lishi kerak');
-      return;
-    }
-
-    if (this.handoverAmount > (curier.cashSummary?.debt || 0)) {
-      this.notification.warning('Summa qarzdan oshmasligi kerak');
-      return;
-    }
-
-    this.submitting.set(true);
-    this.paymentService.handOverCash({
-      curierProfileId: curier.id,
-      companyBranchId: Number(this.handoverBranchId),
-      amount: Number(this.handoverAmount),
-      note: this.handoverNote || undefined
-    }).subscribe({
-      next: () => {
-        this.notification.success('Pul qabul qilindi');
-        this.closeModal();
-        this.loadData();
-        this.submitting.set(false);
-      },
-      error: (err) => {
-        this.notification.error(err?.error?.message || err?.message || 'Xatolik');
-        this.submitting.set(false);
-      }
-    });
-  }
-
   formatMoney(amount: number): string {
     return new Intl.NumberFormat('uz-UZ').format(amount) + ' so\'m';
   }
 
   getTransportLabel(type: number): string {
     return TransportTypeLabels[type] || '';
+  }
+
+  getInitials(name?: string): string {
+    const trimmed = (name || '').trim();
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return (trimmed.slice(0, 2) || 'K').toUpperCase();
+  }
+
+  getTotalCollected(): number {
+    return this.curiers().reduce((sum, c) => sum + (c.cashSummary?.collected || 0), 0);
+  }
+
+  getTotalDebt(): number {
+    return this.curiers().reduce((sum, c) => sum + (c.cashSummary?.debt || 0), 0);
   }
 }

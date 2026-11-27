@@ -6,7 +6,7 @@ import { PaymentService } from '../../../core/services/payment.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { UserNotificationService } from '../../../core/services/user-notification.service';
 import { CurierLocationService } from '../../../core/services/curier-location.service';
-import { CurierResponseDto, CurierCashSummaryDto, TransportTypeLabels } from '../../../core/models/curier.model';
+import { CurierResponseDto, CurierCashSummaryDto, TransportTypeLabels, TransportTypeIcons } from '../../../core/models/curier.model';
 import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
 
 @Component({
@@ -93,6 +93,10 @@ export class CurierDashboardComponent implements OnInit {
 
   getTransportLabel(type: number): string {
     return TransportTypeLabels[type] || 'Noma\'lum';
+  }
+
+  getTransportEmoji(type: number): string {
+    return TransportTypeIcons[type] || '';
   }
 
   formatMoney(amount: number): string {

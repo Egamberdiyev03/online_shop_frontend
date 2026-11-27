@@ -356,7 +356,7 @@ import { ImageUrlPipe } from '../../../shared/pipes/image-url.pipe';
                     class="btn btn-primary btn-sm pay-btn"
                     (click)="openPayModal(order)"
                   >
-                    💳 {{ orderPayments.get(order.id) ? 'Chekni yangilash' : 'To\'lov qilish' }}
+                    💳 {{ orderPayments.get(order.id) ? 'Chekni yangilash' : 'Tolov qilish' }}
                   </button>
                   <button
                     *ngIf="canAssignCurier(order)"

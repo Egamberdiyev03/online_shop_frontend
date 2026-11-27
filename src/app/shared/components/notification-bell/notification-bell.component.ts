@@ -474,6 +474,64 @@ import {
     :host-context(.dark-theme) .item-icon-wrapper {
       background: #1e293b;
     }
+
+    /* ===== MOBIL UCHUN TUZATISH (max-width: 768px) ===== */
+    @media (max-width: 768px) {
+      .dropdown-panel {
+        position: fixed;
+        top: 60px; /* Header balandligi + 4px */
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-width: calc(100vw - 24px);
+        min-width: 0;
+        max-height: calc(100dvh - 80px);
+        box-sizing: border-box;
+        z-index: 1100;
+      }
+
+      .panel-body {
+        max-height: calc(100dvh - 200px);
+        overflow-y: auto;
+      }
+
+      .panel-header {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.75rem;
+      }
+
+      .header-left {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .panel-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+
+      .mark-all-btn {
+        flex-shrink: 0;
+      }
+
+      .item-header-row {
+        flex-wrap: nowrap;
+        min-width: 0;
+      }
+
+      .item-title {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .item-content {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+    }
   `]
 })
 export class NotificationBellComponent implements OnInit, OnDestroy {

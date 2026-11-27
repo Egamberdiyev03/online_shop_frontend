@@ -1,4 +1,5 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, PLATFORM_ID, inject } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 
 
 interface TelegramThemeParams {
@@ -88,10 +89,11 @@ declare global {
   providedIn: 'root'
 })
 export class TelegramService {
+  private platformId = inject(PLATFORM_ID);
   private _isMiniApp = signal(false);
   private _platform = signal<string>('unknown');
   private _colorScheme = signal<'light' | 'dark'>('light');
-  private _viewportHeight = signal(window.innerHeight);
+  private _viewportHeight = signal(typeof window !== 'undefined' ? window.innerHeight : 0);
   private _isExpanded = signal(false);
 
   // Public signals
@@ -124,6 +126,8 @@ export class TelegramService {
   }
 
   private init(): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+
     try {
       this.tg = window.Telegram?.WebApp ?? null;
 

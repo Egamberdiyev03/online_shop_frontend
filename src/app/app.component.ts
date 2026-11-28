@@ -5,17 +5,19 @@ import { NavbarComponent } from './layout/navbar/navbar.component';
 import { FooterComponent } from './layout/footer/footer.component';
 import { ToastComponent } from './shared/components/toast/toast.component';
 import { BottomNavComponent } from './layout/bottom-nav/bottom-nav.component';
+import { PwaInstallPromptComponent } from './shared/components/pwa-install-prompt/pwa-install-prompt.component';
 import { AuthService } from './core/services/auth.service';
 import { AuthStateService } from './core/services/auth-state.service';
 import { TelegramService } from './core/services/telegram.service';
 import { BackButtonService } from './core/services/back-button.service';
 import { UserNotificationService } from './core/services/user-notification.service';
 import { CurierLocationService } from './core/services/curier-location.service';
+import { PwaService } from './core/services/pwa.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, NavbarComponent, FooterComponent, ToastComponent, BottomNavComponent],
+  imports: [CommonModule, RouterOutlet, NavbarComponent, FooterComponent, ToastComponent, BottomNavComponent, PwaInstallPromptComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
 })
@@ -28,6 +30,7 @@ export class AppComponent implements OnInit {
   private backButton = inject(BackButtonService); // Telegram BackButton boshqaruvi
   private userNotification = inject(UserNotificationService); // Global SignalR va kuryer ovozli xabarlari
   private curierLocation = inject(CurierLocationService); // Kuryer Online bo'lganda barcha sahifalarda GPS yuborish
+  private pwa = inject(PwaService); // PWA install prompt va update boshqaruvi
 
   ngOnInit(): void {
     try {
